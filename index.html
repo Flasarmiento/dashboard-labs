@@ -8,7 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/locales/es.global.min.js"></script>
 <style>
-/* (Mantener todos los estilos igual) */
+/* (Mantener todos los estilos igual que en el código anterior) */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -580,53 +580,50 @@ const rangeModeBtn = document.getElementById("rangeModeBtn");
 const selectionInfo = document.getElementById("selectionInfo");
 const cancelSelection = document.getElementById("cancelSelection");
 
-// Inicializar con datos de ejemplo para TODO EL MES
+// Inicializar con datos de ejemplo si no hay nada
 if (Object.keys(events).length === 0) {
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth();
+    const today = new Date().toISOString().split('T')[0];
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
     
-    // Crear eventos para cada día del mes actual
-    for (let day = 1; day <= 28; day++) { // 28 días para asegurar que no nos pasamos
-        const date = new Date(currentYear, currentMonth, day);
-        const dateKey = date.toISOString().split('T')[0];
-        
-        events[dateKey] = {};
-        
-        // Crear eventos para CADA laboratorio en este día
-        labs.forEach((lab, index) => {
-            events[dateKey][lab] = {};
-            
-            // Diferentes horarios según el día
-            const startHour = 9 + (index % 5); // 9, 10, 11, 12, 13
-            const eventId = generateEventId();
-            
-            // Alternar entre mañana y tarde según el día
-            if (day % 2 === 0) {
-                // Días pares: evento por la mañana
-                events[dateKey][lab][eventId] = {
-                    id: eventId,
-                    title: `Clase ${lab}`,
-                    startHour: startHour,
-                    startMinute: 0,
-                    endHour: startHour + 3,
-                    endMinute: index % 2 === 0 ? 0 : 30,
-                    color: colors[index]
-                };
-            } else {
-                // Días impares: evento por la tarde
-                events[dateKey][lab][eventId] = {
-                    id: eventId,
-                    title: `Taller ${lab}`,
-                    startHour: 14 + (index % 4),
-                    startMinute: 30,
-                    endHour: 14 + (index % 4) + 2,
-                    endMinute: 0,
-                    color: colors[index]
-                };
-            }
-        });
-    }
+    events[today] = {};
+    events[today]["SUM"] = {};
+    events[today]["HYS"] = {};
+    
+    const eventId1 = generateEventId();
+    events[today]["SUM"][eventId1] = {
+        id: eventId1,
+        title: "Clase Programación",
+        startHour: 9,
+        startMinute: 0,
+        endHour: 12,
+        endMinute: 30,
+        color: colors[0]
+    };
+    
+    const eventId2 = generateEventId();
+    events[today]["HYS"][eventId2] = {
+        id: eventId2,
+        title: "Laboratorio Física",
+        startHour: 14,
+        startMinute: 0,
+        endHour: 17,
+        endMinute: 0,
+        color: colors[1]
+    };
+    
+    events[tomorrow] = {};
+    events[tomorrow]["ROBÓTICA"] = {};
+    
+    const eventId3 = generateEventId();
+    events[tomorrow]["ROBÓTICA"][eventId3] = {
+        id: eventId3,
+        title: "Taller Robot",
+        startHour: 10,
+        startMinute: 0,
+        endHour: 13,
+        endMinute: 30,
+        color: colors[4]
+    };
     
     localStorage.setItem("labDashboardEvents", JSON.stringify(events));
 }
@@ -1055,7 +1052,7 @@ function deleteEvent(dateKey, lab, eventId) {
     }
 }
 
-// Renderizar vista semanal
+// Renderizar vista semanal - CORREGIDA
 function renderWeekView() {
     if (weekCalendar) {
         weekCalendar.destroy();
@@ -1196,7 +1193,7 @@ function renderWeekView() {
     weekCalendar.render();
 }
 
-// Abrir modal con calendario mensual
+// Abrir modal con calendario mensual - CORREGIDA
 function openModalLab(lab) {
     modal.style.display = "flex";
     modalTitle.textContent = `Calendario Mensual - ${lab}`;
@@ -1367,4 +1364,5 @@ setInterval(() => {
 </script>
 </body>
 </html>
+
 
