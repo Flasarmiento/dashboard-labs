@@ -7,8 +7,14 @@
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/locales/es.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.11/dist/interact.min.js"></script>
+
+<!-- AGREGAR FIREBASE (CDN) -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
 <style>
-/* (Mantener todos los estilos igual que en el código anterior) */
+/* (Mantén todos tus estilos exactamente igual) */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -547,7 +553,7 @@ body {
 const labs = ["SUM", "HYS", "TEXTIL", "RA", "ROBÓTICA", "IA", "FINANZAS", "TRANSPORTE", "LOGÍSTICA", "HYS 2", "STREAMING", "ENERGÍA", "SUSTENTABILIDAD", "DIGITAL"];
 const colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEEAD", "#D4A5A5", "#9B59B6", "#3498DB", "#E67E22", "#2ECC71", "#E74C3C", "#1ABC9C", "#F1C40F", "#34495E"];
 const hours = Array.from({length: 14}, (_, i) => 8 + i); // 8:00 a 21:00
-let events = JSON.parse(localStorage.getItem("labDashboardEvents") || "{}");
+let events = {}; // Ya no cargamos de localStorage aquí
 let currentView = 'diario';
 let currentDate = new Date();
 let weekCalendar = null;
@@ -558,6 +564,9 @@ let rangeModeActive = false;
 let selectionStart = { hour: null, half: null };
 let selectionEnd = { hour: null, half: null };
 let selectedLab = null;
+
+// Variable para drag & drop
+let draggedEvent = null;
 
 // Elementos DOM
 const tbody = document.querySelector("#calendarTable tbody");
@@ -580,53 +589,356 @@ const rangeModeBtn = document.getElementById("rangeModeBtn");
 const selectionInfo = document.getElementById("selectionInfo");
 const cancelSelection = document.getElementById("cancelSelection");
 
-// Inicializar con datos de ejemplo si no hay nada
-if (Object.keys(events).length === 0) {
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-    
-    events[today] = {};
-    events[today]["SUM"] = {};
-    events[today]["HYS"] = {};
-    
-    const eventId1 = generateEventId();
-    events[today]["SUM"][eventId1] = {
-        id: eventId1,
-        title: "Clase Programación",
-        startHour: 9,
-        startMinute: 0,
-        endHour: 12,
-        endMinute: 30,
-        color: colors[0]
-    };
-    
-    const eventId2 = generateEventId();
-    events[today]["HYS"][eventId2] = {
-        id: eventId2,
-        title: "Laboratorio Física",
-        startHour: 14,
-        startMinute: 0,
-        endHour: 17,
-        endMinute: 0,
-        color: colors[1]
-    };
-    
-    events[tomorrow] = {};
-    events[tomorrow]["ROBÓTICA"] = {};
-    
-    const eventId3 = generateEventId();
-    events[tomorrow]["ROBÓTICA"][eventId3] = {
-        id: eventId3,
-        title: "Taller Robot",
-        startHour: 10,
-        startMinute: 0,
-        endHour: 13,
-        endMinute: 30,
-        color: colors[4]
-    };
-    
-    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+// --- INICIALIZACIÓN DE FIREBASE ---
+// Tu configuración de Firebase (la que me diste)
+const firebaseConfig = {
+  apiKey: "AIzaSyCHnu_cC8x8pYDNs3Ji8xeRfiqn6dHoiQI",
+  authDomain: "calendario-reservas-26959.firebaseapp.com",
+  projectId: "calendario-reservas-26959",
+  storageBucket: "calendario-reservas-26959.firebasestorage.app",
+  messagingSenderId: "802756929675",
+  appId: "1:802756929675:web:cc339c160ae87117a9cc8e",
+  measurementId: "G-TDFRDS6Y5W"
+};
+
+// Inicializar Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// --- FUNCIONES PARA FIREBASE (Guardar y Cargar) ---
+
+// Cargar eventos desde Firestore
+async function loadEventsFromFirebase() {
+    try {
+        const docRef = db.collection("calendario").doc("eventos");
+        const docSnap = await docRef.get();
+        
+        if (docSnap.exists) {
+            console.log("Eventos cargados desde Firebase");
+            return docSnap.data().events || {};
+        } else {
+            console.log("No hay eventos guardados, creando documento inicial...");
+            // Si no existe, creamos un objeto vacío en Firebase
+            await db.collection("calendario").doc("eventos").set({ events: {} });
+            return {};
+        }
+    } catch (error) {
+        console.error("Error al cargar desde Firebase: ", error);
+        // Si hay error (ej: sin conexión), devolvemos vacío pero mostramos alerta
+        alert("Error al conectar con Firebase. Verifica tu conexión a internet.");
+        return {};
+    }
 }
+
+// Guardar eventos en Firestore (con debounce para no saturar)
+let saveTimeout;
+function saveEventsToFirebase(newEvents) {
+    // Actualizar la variable global
+    events = newEvents;
+    
+    // Limpiar timeout anterior
+    if (saveTimeout) clearTimeout(saveTimeout);
+    
+    // Esperar 1 segundo antes de guardar (para no guardar en cada pequeño cambio)
+    saveTimeout = setTimeout(async () => {
+        try {
+            await db.collection("calendario").doc("eventos").set({ events: events });
+            console.log("Eventos guardados en Firebase");
+        } catch (error) {
+            console.error("Error al guardar en Firebase: ", error);
+            alert("Error al guardar en Firebase. Los cambios podrían perderse.");
+        }
+    }, 1000);
+}
+
+// --- MODIFICAR TODAS LAS FUNCIONES QUE USABAN LOCALSTORAGE ---
+
+// Función para inicializar la app (la llamamos al final)
+async function initializeApp() {
+    // Cargar eventos desde Firebase
+    events = await loadEventsFromFirebase();
+    
+    // Si no hay eventos, crear datos de ejemplo (opcional)
+    if (Object.keys(events).length === 0) {
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth();
+        
+        for (let day = 1; day <= 28; day++) {
+            const date = new Date(currentYear, currentMonth, day);
+            const dateKey = date.toISOString().split('T')[0];
+            
+            events[dateKey] = {};
+            
+            labs.forEach((lab, index) => {
+                events[dateKey][lab] = {};
+                const startHour = 9 + (index % 5);
+                const eventId = generateEventId();
+                
+                if (day % 2 === 0) {
+                    events[dateKey][lab][eventId] = {
+                        id: eventId,
+                        title: `Clase ${lab}`,
+                        startHour: startHour,
+                        startMinute: 0,
+                        endHour: startHour + 2,
+                        endMinute: 0,
+                        color: colors[index]
+                    };
+                } else {
+                    events[dateKey][lab][eventId] = {
+                        id: eventId,
+                        title: `Taller ${lab}`,
+                        startHour: 14 + (index % 4),
+                        startMinute: 30,
+                        endHour: 14 + (index % 4) + 2,
+                        endMinute: 30,
+                        color: colors[index]
+                    };
+                }
+            });
+        }
+        // Guardar los eventos de ejemplo en Firebase
+        await saveEventsToFirebase(events);
+    }
+    
+    // Construir tabla y actualizar vista
+    buildTable();
+    updateDateDisplay();
+    initializeDragAndDrop();
+    
+    // Iniciar intervalo de actualización
+    setInterval(() => {
+        if (currentView === 'diario') {
+            renderDayView();
+            initializeDragAndDrop();
+        } else {
+            renderWeekView();
+        }
+        if (modal.style.display === 'flex' && monthCalendar) {
+            monthCalendar.refetchEvents();
+        }
+    }, 60000);
+}
+
+// Modificar todas las funciones que guardaban en localStorage
+// para que usen saveEventsToFirebase()
+
+function createSingleEvent(lab, hour, half) {
+    const title = prompt(`Nuevo evento en ${lab} - ${hour}:${half.toString().padStart(2,'0')}`, "");
+    
+    if (title) {
+        const dateKey = getCurrentDateKey();
+        const eventId = generateEventId();
+        
+        if (!events[dateKey]) events[dateKey] = {};
+        if (!events[dateKey][lab]) events[dateKey][lab] = {};
+        
+        let endHour = parseInt(hour);
+        let endMinute = parseInt(half);
+        
+        endMinute += 60;
+        if (endMinute >= 60) {
+            endHour += 1;
+            endMinute -= 60;
+        }
+        
+        events[dateKey][lab][eventId] = {
+            id: eventId,
+            title: title,
+            startHour: parseInt(hour),
+            startMinute: parseInt(half),
+            endHour: endHour,
+            endMinute: endMinute,
+            color: colors[labs.indexOf(lab)]
+        };
+        
+        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        renderDayView();
+        if (weekCalendar) renderWeekView();
+        if (monthCalendar) monthCalendar.refetchEvents();
+        initializeDragAndDrop();
+    }
+}
+
+// En handleMouseUp (para eventos de rango)
+function handleMouseUp(e) {
+    if (!rangeModeActive || !selectionStart.hour) return;
+    
+    const td = e.currentTarget;
+    if (td.dataset.lab !== selectedLab) {
+        cancelRangeSelection();
+        return;
+    }
+    
+    const startMinutes = selectionStart.hour * 60 + selectionStart.half;
+    const endMinutes = selectionEnd.hour * 60 + selectionEnd.half + 30;
+    const durationMinutes = Math.abs(endMinutes - startMinutes);
+    
+    const startHour = Math.floor(Math.min(startMinutes, endMinutes) / 60);
+    const startMinute = Math.min(startMinutes, endMinutes) % 60;
+    const endHour = Math.floor(Math.max(startMinutes, endMinutes) / 60);
+    const endMinute = Math.max(startMinutes, endMinutes) % 60;
+    
+    const title = prompt(`Nuevo bloque en ${selectedLab}\nHorario: ${startHour}:${startMinute.toString().padStart(2,'0')} a ${endHour}:${endMinute.toString().padStart(2,'0')} (${durationMinutes} minutos)`, "");
+    
+    if (title) {
+        const dateKey = getCurrentDateKey();
+        const eventId = generateEventId();
+        
+        if (!events[dateKey]) events[dateKey] = {};
+        if (!events[dateKey][selectedLab]) events[dateKey][selectedLab] = {};
+        
+        events[dateKey][selectedLab][eventId] = {
+            id: eventId,
+            title: title,
+            startHour: startHour,
+            startMinute: startMinute,
+            endHour: endHour,
+            endMinute: endMinute,
+            duration: durationMinutes,
+            color: colors[labs.indexOf(selectedLab)]
+        };
+        
+        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        renderDayView();
+        if (weekCalendar) renderWeekView();
+        if (monthCalendar) monthCalendar.refetchEvents();
+        initializeDragAndDrop();
+    }
+    
+    cancelRangeSelection();
+}
+
+// En editEvent
+function editEvent(dateKey, lab, eventId) {
+    if (!events[dateKey] || !events[dateKey][lab] || !events[dateKey][lab][eventId]) return;
+    
+    const newTitle = prompt("Editar título:", events[dateKey][lab][eventId].title);
+    if (newTitle) {
+        events[dateKey][lab][eventId].title = newTitle;
+        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        renderDayView();
+        if (weekCalendar) renderWeekView();
+        if (monthCalendar) monthCalendar.refetchEvents();
+    }
+}
+
+// En adjustEventTime
+function adjustEventTime(dateKey, lab, eventId, event) {
+    const newStart = prompt("Hora de inicio (ej: 9:30):", `${event.startHour}:${event.startMinute.toString().padStart(2,'0')}`);
+    const newEnd = prompt("Hora de fin (ej: 12:30):", `${event.endHour}:${event.endMinute.toString().padStart(2,'0')}`);
+    
+    if (newStart && newEnd) {
+        const [startH, startM] = newStart.split(':').map(Number);
+        const [endH, endM] = newEnd.split(':').map(Number);
+        
+        if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
+            events[dateKey][lab][eventId].startHour = startH;
+            events[dateKey][lab][eventId].startMinute = startM || 0;
+            events[dateKey][lab][eventId].endHour = endH;
+            events[dateKey][lab][eventId].endMinute = endM || 0;
+            
+            saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+            renderDayView();
+            if (weekCalendar) renderWeekView();
+            if (monthCalendar) monthCalendar.refetchEvents();
+        }
+    }
+}
+
+// En deleteEvent
+function deleteEvent(dateKey, lab, eventId) {
+    if (!events[dateKey] || !events[dateKey][lab] || !events[dateKey][lab][eventId]) return;
+    
+    if (confirm("¿Eliminar este bloque?")) {
+        delete events[dateKey][lab][eventId];
+        
+        if (Object.keys(events[dateKey][lab]).length === 0) {
+            delete events[dateKey][lab];
+        }
+        if (Object.keys(events[dateKey]).length === 0) {
+            delete events[dateKey];
+        }
+        
+        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        renderDayView();
+        if (weekCalendar) renderWeekView();
+        if (monthCalendar) monthCalendar.refetchEvents();
+    }
+}
+
+// En moveEvent (para drag & drop)
+function moveEvent(eventDiv, targetCell) {
+    const oldLab = eventDiv.dataset.lab;
+    const dateKey = eventDiv.dataset.dateKey;
+    const eventId = eventDiv.dataset.eventId;
+    const newLab = targetCell.dataset.lab;
+    const newHour = parseInt(targetCell.dataset.hour);
+    const newHalf = parseInt(targetCell.dataset.half);
+    
+    if (events[dateKey] && events[dateKey][oldLab] && events[dateKey][oldLab][eventId]) {
+        const eventData = events[dateKey][oldLab][eventId];
+        
+        const startMinutes = eventData.startHour * 60 + (eventData.startMinute || 0);
+        const endMinutes = eventData.endHour * 60 + (eventData.endMinute || 0);
+        const durationMinutes = endMinutes - startMinutes;
+        
+        const newStartMinutes = newHour * 60 + newHalf;
+        const newEndMinutes = newStartMinutes + durationMinutes;
+        
+        const newEndHour = Math.floor(newEndMinutes / 60);
+        const newEndMinute = newEndMinutes % 60;
+        
+        if (!events[dateKey][newLab]) events[dateKey][newLab] = {};
+        
+        events[dateKey][newLab][eventId] = {
+            id: eventId,
+            title: eventData.title,
+            startHour: newHour,
+            startMinute: newHalf,
+            endHour: newEndHour,
+            endMinute: newEndMinute,
+            color: colors[labs.indexOf(newLab)]
+        };
+        
+        delete events[dateKey][oldLab][eventId];
+        
+        if (Object.keys(events[dateKey][oldLab]).length === 0) {
+            delete events[dateKey][oldLab];
+        }
+        
+        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        renderDayView();
+        if (weekCalendar) renderWeekView();
+        if (monthCalendar) monthCalendar.refetchEvents();
+        initializeDragAndDrop();
+    }
+}
+
+// En btnLimpiar
+btnLimpiar.addEventListener("click", () => {
+    const dateKey = getCurrentDateKey();
+    if (confirm(`¿Eliminar TODOS los eventos del ${formatDate(currentDate)}?`)) {
+        delete events[dateKey];
+        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        
+        if (currentView === 'diario') {
+            renderDayView();
+        } else {
+            renderWeekView();
+        }
+        if (monthCalendar) monthCalendar.refetchEvents();
+    }
+});
+
+// --- EL RESTO DE TUS FUNCIONES SE QUEDAN IGUAL ---
+// (formatDate, updateDateDisplay, buildTable, handleMouseDown, handleMouseEnter, 
+// clearSelection, cancelRangeSelection, generateEventId, rangeModeBtn, cancelSelection,
+// getCurrentDateKey, renderDayView, renderWeekView, openModalLab, etc.)
+
+// Aquí van todas las demás funciones que ya tenías y que NO modificamos
+// (Las copio desde tu código anterior para completar)
 
 // Formatear fecha para mostrar
 function formatDate(date) {
@@ -709,7 +1021,7 @@ function buildTable() {
             td.dataset.half = 0;
             
             td.addEventListener("click", (e) => {
-                if (!rangeModeActive) {
+                if (!rangeModeActive && e.target === td) {
                     createSingleEvent(td.dataset.lab, td.dataset.hour, td.dataset.half);
                 }
             });
@@ -731,7 +1043,7 @@ function buildTable() {
             td.dataset.half = 30;
             
             td.addEventListener("click", (e) => {
-                if (!rangeModeActive) {
+                if (!rangeModeActive && e.target === td) {
                     createSingleEvent(td.dataset.lab, td.dataset.hour, td.dataset.half);
                 }
             });
@@ -744,39 +1056,6 @@ function buildTable() {
         });
         tbody.appendChild(tr30);
     });
-}
-
-// Crear evento individual
-function createSingleEvent(lab, hour, half) {
-    const title = prompt(`Nuevo evento en ${lab} - ${hour}:${half.toString().padStart(2,'0')}`, "");
-    
-    if (title) {
-        const dateKey = getCurrentDateKey();
-        const eventId = generateEventId();
-        
-        if (!events[dateKey]) events[dateKey] = {};
-        if (!events[dateKey][lab]) events[dateKey][lab] = {};
-        
-        const endHour = half === 30 ? hour + 1 : hour;
-        const endMinute = half === 30 ? 30 : 0;
-        
-        events[dateKey][lab][eventId] = {
-            id: eventId,
-            title: title,
-            startHour: parseInt(hour),
-            startMinute: parseInt(half),
-            endHour: parseInt(endHour),
-            endMinute: parseInt(endMinute),
-            color: colors[labs.indexOf(lab)]
-        };
-        
-        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-        renderDayView();
-        
-        if (currentView === 'semanal') {
-            renderWeekView();
-        }
-    }
 }
 
 // Manejadores para selección de rango
@@ -825,54 +1104,6 @@ function handleMouseEnter(e) {
             }
         }
     }
-}
-
-function handleMouseUp(e) {
-    if (!rangeModeActive || !selectionStart.hour) return;
-    
-    const td = e.currentTarget;
-    if (td.dataset.lab !== selectedLab) {
-        cancelRangeSelection();
-        return;
-    }
-    
-    const startMinutes = selectionStart.hour * 60 + selectionStart.half;
-    const endMinutes = selectionEnd.hour * 60 + selectionEnd.half + 30;
-    const durationMinutes = Math.abs(endMinutes - startMinutes);
-    
-    const startHour = Math.floor(Math.min(startMinutes, endMinutes) / 60);
-    const startMinute = Math.min(startMinutes, endMinutes) % 60;
-    const endHour = Math.floor(Math.max(startMinutes, endMinutes) / 60);
-    const endMinute = Math.max(startMinutes, endMinutes) % 60;
-    
-    const title = prompt(`Nuevo bloque en ${selectedLab}\nHorario: ${startHour}:${startMinute.toString().padStart(2,'0')} a ${endHour}:${endMinute.toString().padStart(2,'0')} (${durationMinutes} minutos)`, "");
-    
-    if (title) {
-        const dateKey = getCurrentDateKey();
-        const eventId = generateEventId();
-        
-        if (!events[dateKey]) events[dateKey] = {};
-        if (!events[dateKey][selectedLab]) events[dateKey][selectedLab] = {};
-        
-        events[dateKey][selectedLab][eventId] = {
-            id: eventId,
-            title: title,
-            startHour: startHour,
-            startMinute: startMinute,
-            endHour: endHour,
-            endMinute: endMinute,
-            color: colors[labs.indexOf(selectedLab)]
-        };
-        
-        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-        renderDayView();
-        
-        if (currentView === 'semanal') {
-            renderWeekView();
-        }
-    }
-    
-    cancelRangeSelection();
 }
 
 function clearSelection() {
@@ -942,6 +1173,8 @@ function renderDayView() {
                 block.style.height = `calc(${durationSlots * 100}% - 4px)`;
                 block.style.top = '2px';
                 block.dataset.eventId = event.id;
+                block.dataset.lab = lab;
+                block.dataset.dateKey = dateKey;
                 
                 const titleDiv = document.createElement("div");
                 titleDiv.className = "event-title";
@@ -989,70 +1222,62 @@ function renderDayView() {
             }
         });
     });
+    
+    initializeDragAndDrop();
 }
 
-function editEvent(dateKey, lab, eventId) {
-    if (!events[dateKey] || !events[dateKey][lab] || !events[dateKey][lab][eventId]) return;
-    
-    const newTitle = prompt("Editar título:", events[dateKey][lab][eventId].title);
-    if (newTitle) {
-        events[dateKey][lab][eventId].title = newTitle;
-        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-        renderDayView();
-        
-        if (currentView === 'semanal') {
-            renderWeekView();
-        }
-    }
-}
-
-function adjustEventTime(dateKey, lab, eventId, event) {
-    const newStart = prompt("Hora de inicio (ej: 9:30):", `${event.startHour}:${event.startMinute.toString().padStart(2,'0')}`);
-    const newEnd = prompt("Hora de fin (ej: 12:30):", `${event.endHour}:${event.endMinute.toString().padStart(2,'0')}`);
-    
-    if (newStart && newEnd) {
-        const [startH, startM] = newStart.split(':').map(Number);
-        const [endH, endM] = newEnd.split(':').map(Number);
-        
-        if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
-            events[dateKey][lab][eventId].startHour = startH;
-            events[dateKey][lab][eventId].startMinute = startM || 0;
-            events[dateKey][lab][eventId].endHour = endH;
-            events[dateKey][lab][eventId].endMinute = endM || 0;
-            
-            localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-            renderDayView();
-            
-            if (currentView === 'semanal') {
-                renderWeekView();
+// Inicializar drag & drop con interact.js
+function initializeDragAndDrop() {
+    interact('.event-block').draggable({
+        inertia: true,
+        modifiers: [
+            interact.modifiers.restrictRect({
+                restriction: '#calendarContainer',
+                endOnly: true
+            })
+        ],
+        autoScroll: true,
+        listeners: {
+            start(event) {
+                draggedEvent = event.target;
+                draggedEvent.style.opacity = '0.8';
+                draggedEvent.style.zIndex = '1000';
+            },
+            move(event) {
+                const target = event.target;
+                const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+                const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+                
+                target.style.transform = `translate(${x}px, ${y}px)`;
+                target.setAttribute('data-x', x);
+                target.setAttribute('data-y', y);
+            },
+            end(event) {
+                const target = event.target;
+                target.style.opacity = '1';
+                target.style.zIndex = '5';
+                
+                const rect = target.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                const cell = document.elementFromPoint(centerX, centerY);
+                
+                if (cell && cell.tagName === 'TD' && cell.dataset.lab && cell.dataset.hour) {
+                    moveEvent(target, cell);
+                }
+                
+                target.style.transform = '';
+                target.setAttribute('data-x', 0);
+                target.setAttribute('data-y', 0);
+                
+                draggedEvent = null;
             }
         }
-    }
+    });
 }
 
-function deleteEvent(dateKey, lab, eventId) {
-    if (!events[dateKey] || !events[dateKey][lab] || !events[dateKey][lab][eventId]) return;
-    
-    if (confirm("¿Eliminar este bloque?")) {
-        delete events[dateKey][lab][eventId];
-        
-        if (Object.keys(events[dateKey][lab]).length === 0) {
-            delete events[dateKey][lab];
-        }
-        if (Object.keys(events[dateKey]).length === 0) {
-            delete events[dateKey];
-        }
-        
-        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-        renderDayView();
-        
-        if (currentView === 'semanal') {
-            renderWeekView();
-        }
-    }
-}
-
-// Renderizar vista semanal - CORREGIDA
+// Renderizar vista semanal con FullCalendar
 function renderWeekView() {
     if (weekCalendar) {
         weekCalendar.destroy();
@@ -1080,7 +1305,7 @@ function renderWeekView() {
                     
                     fcEvents.push({
                         id: event.id,
-                        title: event.title,
+                        title: `[${lab}] ${event.title}`,
                         start: start,
                         end: end,
                         color: event.color || colors[labs.indexOf(lab)],
@@ -1115,15 +1340,17 @@ function renderWeekView() {
             const date = info.event.extendedProps.date;
             const eventId = info.event.extendedProps.eventId;
             
-            const action = prompt("1: Editar título\n2: Ajustar horario\n3: Eliminar");
+            const action = prompt("1: Editar título\n2: Ajustar horario\n3: Eliminar\n0: Cancelar");
             
             if (action === "1") {
                 if (events[date] && events[date][lab] && events[date][lab][eventId]) {
-                    const newTitle = prompt("Nuevo título:", info.event.title);
+                    const newTitle = prompt("Nuevo título:", events[date][lab][eventId].title);
                     if (newTitle) {
                         events[date][lab][eventId].title = newTitle;
-                        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                        saveEventsToFirebase(events);
                         renderWeekView();
+                        renderDayView();
+                        if (monthCalendar) monthCalendar.refetchEvents();
                     }
                 }
             } else if (action === "2") {
@@ -1142,16 +1369,28 @@ function renderWeekView() {
                             events[date][lab][eventId].endHour = endH;
                             events[date][lab][eventId].endMinute = endM || 0;
                             
-                            localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                            saveEventsToFirebase(events);
                             renderWeekView();
+                            renderDayView();
+                            if (monthCalendar) monthCalendar.refetchEvents();
                         }
                     }
                 }
             } else if (action === "3") {
                 if (confirm("¿Eliminar este bloque?")) {
                     delete events[date][lab][eventId];
-                    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                    
+                    if (Object.keys(events[date][lab]).length === 0) {
+                        delete events[date][lab];
+                    }
+                    if (Object.keys(events[date]).length === 0) {
+                        delete events[date];
+                    }
+                    
+                    saveEventsToFirebase(events);
                     renderWeekView();
+                    renderDayView();
+                    if (monthCalendar) monthCalendar.refetchEvents();
                 }
             }
         },
@@ -1160,7 +1399,8 @@ function renderWeekView() {
                 const clickedDate = info.date;
                 const hour = clickedDate.getHours();
                 const minute = clickedDate.getMinutes();
-                const lab = prompt("¿En qué laboratorio? (SUM, HYS, TEXTIL, etc.)", "SUM");
+                
+                const lab = prompt("¿En qué laboratorio?\n" + labs.join(', '), "SUM");
                 
                 if (lab && labs.includes(lab)) {
                     const dateKey = clickedDate.toISOString().split('T')[0];
@@ -1172,18 +1412,27 @@ function renderWeekView() {
                         if (!events[dateKey]) events[dateKey] = {};
                         if (!events[dateKey][lab]) events[dateKey][lab] = {};
                         
+                        let endHour = hour;
+                        let endMinute = minute + 60;
+                        if (endMinute >= 60) {
+                            endHour += 1;
+                            endMinute -= 60;
+                        }
+                        
                         events[dateKey][lab][eventId] = {
                             id: eventId,
                             title: title,
                             startHour: hour,
                             startMinute: minute,
-                            endHour: hour + 1,
-                            endMinute: minute,
+                            endHour: endHour,
+                            endMinute: endMinute,
                             color: colors[labs.indexOf(lab)]
                         };
                         
-                        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                        saveEventsToFirebase(events);
                         renderWeekView();
+                        renderDayView();
+                        if (monthCalendar) monthCalendar.refetchEvents();
                     }
                 }
             }
@@ -1193,7 +1442,7 @@ function renderWeekView() {
     weekCalendar.render();
 }
 
-// Abrir modal con calendario mensual - CORREGIDA
+// Abrir modal con calendario mensual
 function openModalLab(lab) {
     modal.style.display = "flex";
     modalTitle.textContent = `Calendario Mensual - ${lab}`;
@@ -1201,6 +1450,7 @@ function openModalLab(lab) {
     
     const calendarEl = document.createElement("div");
     calendarEl.style.height = "100%";
+    calendarEl.style.width = "100%";
     monthCalendarEl.appendChild(calendarEl);
 
     const fcEvents = [];
@@ -1219,7 +1469,12 @@ function openModalLab(lab) {
                     start: start,
                     end: end,
                     color: event.color || colors[labs.indexOf(lab)],
-                    allDay: false
+                    allDay: false,
+                    extendedProps: {
+                        lab: lab,
+                        date: date,
+                        eventId: event.id
+                    }
                 });
             }
         }
@@ -1239,54 +1494,61 @@ function openModalLab(lab) {
         },
         events: fcEvents,
         height: '100%',
+        slotDuration: '00:30:00',
         eventClick: function(info) {
-            const eventId = info.event.id;
+            const lab = info.event.extendedProps.lab;
+            const date = info.event.extendedProps.date;
+            const eventId = info.event.extendedProps.eventId;
             
-            for (let date in events) {
-                for (let l in events[date]) {
-                    for (let eid in events[date][l]) {
-                        if (eid === eventId) {
-                            const lab = l;
-                            const dateKey = date;
+            const action = prompt("1: Editar título\n2: Ajustar horario\n3: Eliminar\n0: Cancelar");
+            
+            if (action === "1") {
+                const newTitle = prompt("Nuevo título:", info.event.title);
+                if (newTitle && events[date] && events[date][lab] && events[date][lab][eventId]) {
+                    events[date][lab][eventId].title = newTitle;
+                    saveEventsToFirebase(events);
+                    monthCalendar.refetchEvents();
+                    renderDayView();
+                    if (weekCalendar) renderWeekView();
+                }
+            } else if (action === "2") {
+                if (events[date] && events[date][lab] && events[date][lab][eventId]) {
+                    const event = events[date][lab][eventId];
+                    const newStart = prompt("Nueva hora de inicio (ej: 9:30):", `${event.startHour}:${(event.startMinute || 0).toString().padStart(2,'0')}`);
+                    const newEnd = prompt("Nueva hora de fin (ej: 12:30):", `${event.endHour}:${(event.endMinute || 0).toString().padStart(2,'0')}`);
+                    
+                    if (newStart && newEnd) {
+                        const [startH, startM] = newStart.split(':').map(Number);
+                        const [endH, endM] = newEnd.split(':').map(Number);
+                        
+                        if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
+                            events[date][lab][eventId].startHour = startH;
+                            events[date][lab][eventId].startMinute = startM || 0;
+                            events[date][lab][eventId].endHour = endH;
+                            events[date][lab][eventId].endMinute = endM || 0;
                             
-                            const action = prompt("1: Editar título\n2: Ajustar horario\n3: Eliminar");
-                            
-                            if (action === "1") {
-                                const newTitle = prompt("Nuevo título:", info.event.title);
-                                if (newTitle) {
-                                    events[dateKey][lab][eventId].title = newTitle;
-                                    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-                                    monthCalendar.refetchEvents();
-                                }
-                            } else if (action === "2") {
-                                const event = events[dateKey][lab][eventId];
-                                const newStart = prompt("Nueva hora de inicio (ej: 9:30):", `${event.startHour}:${(event.startMinute || 0).toString().padStart(2,'0')}`);
-                                const newEnd = prompt("Nueva hora de fin (ej: 12:30):", `${event.endHour}:${(event.endMinute || 0).toString().padStart(2,'0')}`);
-                                
-                                if (newStart && newEnd) {
-                                    const [startH, startM] = newStart.split(':').map(Number);
-                                    const [endH, endM] = newEnd.split(':').map(Number);
-                                    
-                                    if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
-                                        events[dateKey][lab][eventId].startHour = startH;
-                                        events[dateKey][lab][eventId].startMinute = startM || 0;
-                                        events[dateKey][lab][eventId].endHour = endH;
-                                        events[dateKey][lab][eventId].endMinute = endM || 0;
-                                        
-                                        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-                                        monthCalendar.refetchEvents();
-                                    }
-                                }
-                            } else if (action === "3") {
-                                if (confirm("¿Eliminar este bloque?")) {
-                                    delete events[dateKey][lab][eventId];
-                                    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-                                    monthCalendar.refetchEvents();
-                                }
-                            }
-                            return;
+                            saveEventsToFirebase(events);
+                            monthCalendar.refetchEvents();
+                            renderDayView();
+                            if (weekCalendar) renderWeekView();
                         }
                     }
+                }
+            } else if (action === "3") {
+                if (confirm("¿Eliminar este bloque?")) {
+                    delete events[date][lab][eventId];
+                    
+                    if (Object.keys(events[date][lab]).length === 0) {
+                        delete events[date][lab];
+                    }
+                    if (Object.keys(events[date]).length === 0) {
+                        delete events[date];
+                    }
+                    
+                    saveEventsToFirebase(events);
+                    monthCalendar.refetchEvents();
+                    renderDayView();
+                    if (weekCalendar) renderWeekView();
                 }
             }
         }
@@ -1311,20 +1573,6 @@ closeModal.addEventListener("click", () => {
     modal.style.display = "none";
 });
 
-btnLimpiar.addEventListener("click", () => {
-    const dateKey = getCurrentDateKey();
-    if (confirm(`¿Eliminar TODOS los eventos del ${formatDate(currentDate)}?`)) {
-        delete events[dateKey];
-        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-        
-        if (currentView === 'diario') {
-            renderDayView();
-        } else {
-            renderWeekView();
-        }
-    }
-});
-
 viewButtons.forEach(btn => {
     btn.addEventListener("click", () => {
         viewButtons.forEach(b => b.classList.remove("active"));
@@ -1335,6 +1583,7 @@ viewButtons.forEach(btn => {
             dayViewContainer.style.display = 'block';
             weekViewContainer.style.display = 'none';
             renderDayView();
+            initializeDragAndDrop();
         } else {
             dayViewContainer.style.display = 'none';
             weekViewContainer.style.display = 'block';
@@ -1349,20 +1598,9 @@ window.addEventListener("click", (e) => {
     }
 });
 
-// Inicializar
-buildTable();
-updateDateDisplay();
-
-// Actualizar vistas periódicamente
-setInterval(() => {
-    if (currentView === 'diario') {
-        renderDayView();
-    } else {
-        renderWeekView();
-    }
-}, 60000);
+// --- INICIAR LA APLICACIÓN ---
+initializeApp();
 </script>
 </body>
 </html>
-
 
