@@ -7,8 +7,8 @@
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/locales/es.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.11/dist/interact.min.js"></script>
 <style>
-/* (Mantener todos los estilos igual) */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -179,21 +179,21 @@ body {
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     padding: 10px;
-    max-height: calc(100vh - 180px);
 }
 
 #calendarTable {
     border-collapse: collapse;
     width: 100%;
-    min-width: 1200px;
+    min-width: 1000px;
     table-layout: fixed;
 }
 
 #calendarTable th, #calendarTable td {
     border: 1px solid #e0e0e0;
     text-align: center;
-    height: 30px;
+    height: 60px;
     position: relative;
+    cursor: pointer;
 }
 
 #calendarTable th {
@@ -203,24 +203,19 @@ body {
     top: 0;
     z-index: 10;
     font-weight: 600;
-    padding: 8px 5px;
-    font-size: 0.85rem;
-    height: 40px;
+    padding: 12px 5px;
+    font-size: 0.9rem;
 }
 
 #calendarTable th:first-child {
     background: #153244;
     color: #FFCC00;
-    width: 80px;
-    position: sticky;
-    left: 0;
-    z-index: 15;
+    width: 70px;
 }
 
 #calendarTable td {
     background: white;
     transition: background 0.2s;
-    cursor: pointer;
 }
 
 #calendarTable td:hover {
@@ -230,77 +225,83 @@ body {
 #calendarTable td.selected {
     background: #e3f2fd;
     border: 2px solid #2196F3;
+    z-index: 5;
 }
 
 #calendarTable td.selecting {
     background: #bbdefb;
 }
 
-.event-block {
+#calendarTable td.has-event {
+    background: #fff3e0;
+}
+
+.event {
     position: absolute;
+    top: 2px;
     left: 2px;
     right: 2px;
+    bottom: 2px;
     color: #FFFFFF;
-    padding: 2px 4px;
-    border-radius: 4px;
-    font-size: 0.7rem;
+    padding: 4px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    overflow-y: auto;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
     word-break: break-word;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    z-index: 5;
-    border: 1px solid rgba(255,255,255,0.3);
-    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    z-index: 20;
+    cursor: grab;
     transition: all 0.2s;
-    pointer-events: auto;
 }
 
-.event-block:hover {
-    filter: brightness(0.95);
-    z-index: 10;
+.event.dragging {
+    opacity: 0.8;
+    transform: scale(1.02);
+    z-index: 1000;
+    cursor: grabbing;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.3);
 }
 
-.event-block .event-title {
-    font-weight: bold;
-    font-size: 0.7rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-}
-
-.event-block .event-time {
-    font-size: 0.6rem;
-    background: rgba(0,0,0,0.3);
-    padding: 1px 3px;
-    border-radius: 3px;
-    margin-top: 1px;
-}
-
-.event-block .edit-controls {
+.event .resize-handle {
     position: absolute;
-    top: 1px;
-    right: 1px;
-    display: none;
-    gap: 1px;
-    z-index: 15;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 8px;
+    background: rgba(255,255,255,0.3);
+    cursor: ns-resize;
+    border-radius: 0 0 6px 6px;
 }
 
-.event-block:hover .edit-controls {
+.event .resize-handle:hover {
+    background: rgba(255,255,255,0.5);
+}
+
+.event .edit-controls {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: none;
+    gap: 2px;
+    z-index: 30;
+}
+
+.event:hover .edit-controls {
     display: flex;
 }
 
-.edit-btn, .delete-btn, .time-btn {
+.edit-btn, .delete-btn, .duplicate-btn, .time-btn {
     background: rgba(0,0,0,0.5);
     border: none;
     color: white;
-    width: 16px;
-    height: 16px;
-    border-radius: 2px;
-    font-size: 10px;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    font-size: 12px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -308,7 +309,7 @@ body {
     backdrop-filter: blur(2px);
 }
 
-.edit-btn:hover, .delete-btn:hover, .time-btn:hover {
+.edit-btn:hover, .delete-btn:hover, .duplicate-btn:hover, .time-btn:hover {
     background: rgba(0,0,0,0.7);
 }
 
@@ -377,13 +378,6 @@ body {
     min-height: 0;
 }
 
-.fc-event {
-    cursor: pointer;
-    font-size: 0.8rem !important;
-    border-radius: 4px !important;
-    padding: 2px 4px !important;
-}
-
 #selectionInfo {
     background: #153244;
     color: white;
@@ -417,7 +411,6 @@ body {
 #weekViewContainer {
     display: none;
     height: 100%;
-    overflow: auto;
 }
 
 #weekViewContainer.active {
@@ -427,20 +420,17 @@ body {
 #dayViewContainer {
     display: block;
     height: 100%;
-    overflow: hidden;
 }
 
 #dayViewContainer.hidden {
     display: none;
 }
 
-.time-slot {
-    font-weight: bold;
-    background: #f8f9fa;
-    position: sticky;
-    left: 0;
-    z-index: 12;
-    font-size: 0.8rem;
+.fc-event {
+    cursor: pointer;
+    font-size: 0.85rem !important;
+    border-radius: 4px !important;
+    padding: 2px 4px !important;
 }
 
 /* Responsive */
@@ -474,8 +464,19 @@ body {
     }
 }
 
-.fc .fc-toolbar-title {
-    font-size: 1.2rem !important;
+.time-slot {
+    font-weight: bold;
+    background: #f8f9fa;
+}
+
+.event-range-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 6px 6px 0 0;
 }
 </style>
 </head>
@@ -509,7 +510,7 @@ body {
   </div>
   
   <div id="selectionInfo">
-    <span>Selecciona la hora de inicio y arrastra hasta la hora de fin</span>
+    <span>Arrastra para seleccionar un rango de horas</span>
     <button id="cancelSelection">✕</button>
   </div>
   
@@ -531,7 +532,7 @@ body {
   </div>
 </div>
 
-<!-- Modal Mensual -->
+<!-- Modal Mensual (para laboratorios individuales) -->
 <div id="modal">
   <div id="modalContent">
     <div id="modalHeader">
@@ -551,20 +552,22 @@ let events = JSON.parse(localStorage.getItem("labDashboardEvents") || "{}");
 let currentView = 'diario';
 let currentDate = new Date();
 let weekCalendar = null;
-let monthCalendar = null;
 
 // Variables para selección de rango
 let rangeModeActive = false;
-let selectionStart = { hour: null, half: null };
-let selectionEnd = { hour: null, half: null };
+let selectionStart = null;
+let selectionEnd = null;
 let selectedLab = null;
+
+// Variable para drag & drop
+let draggedEvent = null;
 
 // Elementos DOM
 const tbody = document.querySelector("#calendarTable tbody");
 const labList = document.getElementById("labList");
 const modal = document.getElementById("modal");
 const closeModal = document.getElementById("closeModal");
-const monthCalendarEl = document.getElementById("monthCalendar");
+const monthCalendar = document.getElementById("monthCalendar");
 const modalTitle = document.getElementById("modalTitle");
 const btnHoy = document.getElementById("btnHoy");
 const btnLimpiar = document.getElementById("btnLimpiar");
@@ -579,57 +582,6 @@ const weekCalendarEl = document.getElementById("weekCalendar");
 const rangeModeBtn = document.getElementById("rangeModeBtn");
 const selectionInfo = document.getElementById("selectionInfo");
 const cancelSelection = document.getElementById("cancelSelection");
-
-// Inicializar con datos de ejemplo para TODO EL MES
-if (Object.keys(events).length === 0) {
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth();
-    
-    // Crear eventos para cada día del mes actual
-    for (let day = 1; day <= 28; day++) { // 28 días para asegurar que no nos pasamos
-        const date = new Date(currentYear, currentMonth, day);
-        const dateKey = date.toISOString().split('T')[0];
-        
-        events[dateKey] = {};
-        
-        // Crear eventos para CADA laboratorio en este día
-        labs.forEach((lab, index) => {
-            events[dateKey][lab] = {};
-            
-            // Diferentes horarios según el día
-            const startHour = 9 + (index % 5); // 9, 10, 11, 12, 13
-            const eventId = generateEventId();
-            
-            // Alternar entre mañana y tarde según el día
-            if (day % 2 === 0) {
-                // Días pares: evento por la mañana
-                events[dateKey][lab][eventId] = {
-                    id: eventId,
-                    title: `Clase ${lab}`,
-                    startHour: startHour,
-                    startMinute: 0,
-                    endHour: startHour + 3,
-                    endMinute: index % 2 === 0 ? 0 : 30,
-                    color: colors[index]
-                };
-            } else {
-                // Días impares: evento por la tarde
-                events[dateKey][lab][eventId] = {
-                    id: eventId,
-                    title: `Taller ${lab}`,
-                    startHour: 14 + (index % 4),
-                    startMinute: 30,
-                    endHour: 14 + (index % 4) + 2,
-                    endMinute: 0,
-                    color: colors[index]
-                };
-            }
-        });
-    }
-    
-    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-}
 
 // Formatear fecha para mostrar
 function formatDate(date) {
@@ -647,7 +599,7 @@ function updateDateDisplay() {
     datePicker.value = currentDate.toISOString().split('T')[0];
     
     if (currentView === 'diario') {
-        renderDayView();
+        renderEvents();
     } else {
         renderWeekView();
     }
@@ -682,7 +634,7 @@ btnHoy.addEventListener("click", () => {
     updateDateDisplay();
 });
 
-// Construir tabla diaria con medias horas
+// Construir tabla diaria
 function buildTable() {
     const thead = document.querySelector("#calendarTable thead tr");
     thead.innerHTML = '<th>Hora</th>';
@@ -695,91 +647,35 @@ function buildTable() {
     });
 
     tbody.innerHTML = "";
-    
-    hours.forEach((h) => {
-        // Fila para :00
-        const tr00 = document.createElement("tr");
-        const th00 = document.createElement("th");
-        th00.textContent = `${h}:00`;
-        th00.className = 'time-slot';
-        th00.rowSpan = 2;
-        tr00.appendChild(th00);
+    hours.forEach(h => {
+        const tr = document.createElement("tr");
+        
+        const th = document.createElement("th");
+        th.textContent = `${h}:00`;
+        th.className = 'time-slot';
+        tr.appendChild(th);
         
         labs.forEach(lab => {
             const td = document.createElement("td");
             td.dataset.lab = lab;
             td.dataset.hour = h;
-            td.dataset.half = 0;
             
-            td.addEventListener("click", (e) => {
-                if (!rangeModeActive) {
-                    createSingleEvent(td.dataset.lab, td.dataset.hour, td.dataset.half);
-                }
-            });
-            
+            // Eventos para selección de rango
             td.addEventListener("mousedown", handleMouseDown);
             td.addEventListener("mouseenter", handleMouseEnter);
             td.addEventListener("mouseup", handleMouseUp);
             
-            tr00.appendChild(td);
-        });
-        tbody.appendChild(tr00);
-        
-        // Fila para :30
-        const tr30 = document.createElement("tr");
-        labs.forEach(lab => {
-            const td = document.createElement("td");
-            td.dataset.lab = lab;
-            td.dataset.hour = h;
-            td.dataset.half = 30;
-            
+            // Click normal para agregar evento (si no está en modo rango)
             td.addEventListener("click", (e) => {
-                if (!rangeModeActive) {
-                    createSingleEvent(td.dataset.lab, td.dataset.hour, td.dataset.half);
+                if (!rangeModeActive && e.target === td) {
+                    addSingleEvent(td.dataset.lab, td.dataset.hour);
                 }
             });
             
-            td.addEventListener("mousedown", handleMouseDown);
-            td.addEventListener("mouseenter", handleMouseEnter);
-            td.addEventListener("mouseup", handleMouseUp);
-            
-            tr30.appendChild(td);
+            tr.appendChild(td);
         });
-        tbody.appendChild(tr30);
+        tbody.appendChild(tr);
     });
-}
-
-// Crear evento individual
-function createSingleEvent(lab, hour, half) {
-    const title = prompt(`Nuevo evento en ${lab} - ${hour}:${half.toString().padStart(2,'0')}`, "");
-    
-    if (title) {
-        const dateKey = getCurrentDateKey();
-        const eventId = generateEventId();
-        
-        if (!events[dateKey]) events[dateKey] = {};
-        if (!events[dateKey][lab]) events[dateKey][lab] = {};
-        
-        const endHour = half === 30 ? hour + 1 : hour;
-        const endMinute = half === 30 ? 30 : 0;
-        
-        events[dateKey][lab][eventId] = {
-            id: eventId,
-            title: title,
-            startHour: parseInt(hour),
-            startMinute: parseInt(half),
-            endHour: parseInt(endHour),
-            endMinute: parseInt(endMinute),
-            color: colors[labs.indexOf(lab)]
-        };
-        
-        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-        renderDayView();
-        
-        if (currentView === 'semanal') {
-            renderWeekView();
-        }
-    }
 }
 
 // Manejadores para selección de rango
@@ -789,49 +685,37 @@ function handleMouseDown(e) {
     
     const td = e.currentTarget;
     selectedLab = td.dataset.lab;
-    selectionStart = {
-        hour: parseInt(td.dataset.hour),
-        half: parseInt(td.dataset.half)
-    };
-    selectionEnd = { ...selectionStart };
+    selectionStart = parseInt(td.dataset.hour);
+    selectionEnd = selectionStart;
     
     clearSelection();
     td.classList.add('selected');
 }
 
 function handleMouseEnter(e) {
-    if (!rangeModeActive || !selectionStart.hour) return;
+    if (!rangeModeActive || selectionStart === null) return;
     
     const td = e.currentTarget;
     if (td.dataset.lab !== selectedLab) return;
     
-    selectionEnd = {
-        hour: parseInt(td.dataset.hour),
-        half: parseInt(td.dataset.half)
-    };
+    selectionEnd = parseInt(td.dataset.hour);
     
     clearSelection();
     
-    const startMinutes = selectionStart.hour * 60 + selectionStart.half;
-    const endMinutes = selectionEnd.hour * 60 + selectionEnd.half;
-    const minMinutes = Math.min(startMinutes, endMinutes);
-    const maxMinutes = Math.max(startMinutes, endMinutes);
+    // Marcar el rango
+    const minHour = Math.min(selectionStart, selectionEnd);
+    const maxHour = Math.max(selectionStart, selectionEnd);
     
-    for (let h = 8; h <= 21; h++) {
-        for (let half of [0, 30]) {
-            const currentMinutes = h * 60 + half;
-            if (currentMinutes >= minMinutes && currentMinutes <= maxMinutes) {
-                const cell = document.querySelector(`td[data-lab="${selectedLab}"][data-hour="${h}"][data-half="${half}"]`);
-                if (cell) {
-                    cell.classList.add('selecting');
-                }
-            }
+    for (let h = minHour; h <= maxHour; h++) {
+        const cell = document.querySelector(`td[data-lab="${selectedLab}"][data-hour="${h}"]`);
+        if (cell) {
+            cell.classList.add(h === selectionStart ? 'selected' : 'selecting');
         }
     }
 }
 
 function handleMouseUp(e) {
-    if (!rangeModeActive || !selectionStart.hour) return;
+    if (!rangeModeActive || selectionStart === null) return;
     
     const td = e.currentTarget;
     if (td.dataset.lab !== selectedLab) {
@@ -839,40 +723,34 @@ function handleMouseUp(e) {
         return;
     }
     
-    const startMinutes = selectionStart.hour * 60 + selectionStart.half;
-    const endMinutes = selectionEnd.hour * 60 + selectionEnd.half + 30;
-    const durationMinutes = Math.abs(endMinutes - startMinutes);
+    // Crear evento para todo el rango
+    const minHour = Math.min(selectionStart, selectionEnd);
+    const maxHour = Math.max(selectionStart, selectionEnd);
+    const totalHours = maxHour - minHour + 1;
     
-    const startHour = Math.floor(Math.min(startMinutes, endMinutes) / 60);
-    const startMinute = Math.min(startMinutes, endMinutes) % 60;
-    const endHour = Math.floor(Math.max(startMinutes, endMinutes) / 60);
-    const endMinute = Math.max(startMinutes, endMinutes) % 60;
-    
-    const title = prompt(`Nuevo bloque en ${selectedLab}\nHorario: ${startHour}:${startMinute.toString().padStart(2,'0')} a ${endHour}:${endMinute.toString().padStart(2,'0')} (${durationMinutes} minutos)`, "");
+    const title = prompt(`Nuevo evento en ${selectedLab}\nHorario: ${minHour}:00 a ${maxHour + 1}:00 (${totalHours} horas)`, "");
     
     if (title) {
         const dateKey = getCurrentDateKey();
-        const eventId = generateEventId();
-        
         if (!events[dateKey]) events[dateKey] = {};
         if (!events[dateKey][selectedLab]) events[dateKey][selectedLab] = {};
         
-        events[dateKey][selectedLab][eventId] = {
-            id: eventId,
-            title: title,
-            startHour: startHour,
-            startMinute: startMinute,
-            endHour: endHour,
-            endMinute: endMinute,
-            color: colors[labs.indexOf(selectedLab)]
-        };
+        // Guardar como un solo evento con rango
+        const eventId = generateEventId();
+        for (let h = minHour; h <= maxHour; h++) {
+            events[dateKey][selectedLab][h] = { 
+                title, 
+                duration: 1,
+                eventId: eventId,
+                partOfRange: true,
+                rangeStart: minHour,
+                rangeEnd: maxHour
+            };
+        }
         
         localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-        renderDayView();
-        
-        if (currentView === 'semanal') {
-            renderWeekView();
-        }
+        renderEvents();
+        initializeDragAndDrop();
     }
     
     cancelRangeSelection();
@@ -885,16 +763,18 @@ function clearSelection() {
 }
 
 function cancelRangeSelection() {
-    selectionStart = { hour: null, half: null };
-    selectionEnd = { hour: null, half: null };
+    selectionStart = null;
+    selectionEnd = null;
     selectedLab = null;
     clearSelection();
 }
 
+// Generar ID único para evento
 function generateEventId() {
-    return 'evt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return 'event_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
+// Activar/desactivar modo rango
 rangeModeBtn.addEventListener("click", () => {
     rangeModeActive = !rangeModeActive;
     rangeModeBtn.classList.toggle('active');
@@ -912,150 +792,432 @@ cancelSelection.addEventListener("click", () => {
     cancelRangeSelection();
 });
 
+// Agregar evento individual
+function addSingleEvent(lab, hour, prefillTitle = '') {
+    const dateKey = getCurrentDateKey();
+    const title = prompt(`Nuevo evento en ${lab} - ${hour}:00`, prefillTitle);
+    
+    if (title) {
+        if (!events[dateKey]) events[dateKey] = {};
+        if (!events[dateKey][lab]) events[dateKey][lab] = {};
+        
+        events[dateKey][lab][hour] = { 
+            title, 
+            duration: 1,
+            eventId: generateEventId()
+        };
+        
+        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+        renderEvents();
+        initializeDragAndDrop();
+    }
+}
+
+// Obtener fecha actual en formato YYYY-MM-DD
 function getCurrentDateKey() {
     return currentDate.toISOString().split("T")[0];
 }
 
-function renderDayView() {
+// Renderizar eventos diarios
+function renderEvents() {
     document.querySelectorAll("#calendarTable td").forEach(td => {
-        td.innerHTML = '';
-    });
-    
-    const dateKey = getCurrentDateKey();
-    
-    if (!events[dateKey]) return;
-    
-    labs.forEach(lab => {
-        if (!events[dateKey][lab]) return;
+        const lab = td.dataset.lab;
+        const hour = td.dataset.hour;
+        td.innerHTML = "";
+        td.classList.remove('has-event');
         
-        Object.values(events[dateKey][lab]).forEach(event => {
-            const startHour = event.startHour;
-            const startMinute = event.startMinute || 0;
+        const dateKey = getCurrentDateKey();
+        
+        if (events[dateKey] && events[dateKey][lab] && events[dateKey][lab][hour]) {
+            const eventData = events[dateKey][lab][hour];
+            const title = typeof eventData === 'string' ? eventData : eventData.title;
             
-            const startCell = document.querySelector(`td[data-lab="${lab}"][data-hour="${startHour}"][data-half="${startMinute === 30 ? 30 : 0}"]`);
+            td.classList.add('has-event');
             
-            if (startCell) {
-                const startMinutes = startHour * 60 + startMinute;
-                const endMinutes = event.endHour * 60 + (event.endMinute || 0);
-                const durationSlots = Math.ceil((endMinutes - startMinutes) / 30);
-                
-                const block = document.createElement("div");
-                block.className = "event-block";
-                block.style.backgroundColor = event.color || colors[labs.indexOf(lab)];
-                block.style.height = `calc(${durationSlots * 100}% - 4px)`;
-                block.style.top = '2px';
-                block.dataset.eventId = event.id;
-                
-                const titleDiv = document.createElement("div");
-                titleDiv.className = "event-title";
-                titleDiv.textContent = event.title;
-                block.appendChild(titleDiv);
-                
-                const timeDiv = document.createElement("div");
-                timeDiv.className = "event-time";
-                timeDiv.textContent = `${startHour}:${startMinute.toString().padStart(2,'0')} - ${event.endHour}:${(event.endMinute || 0).toString().padStart(2,'0')}`;
-                block.appendChild(timeDiv);
-                
-                const controls = document.createElement("div");
-                controls.className = "edit-controls";
-                
-                const editBtn = document.createElement("button");
-                editBtn.className = "edit-btn";
-                editBtn.innerHTML = "✏️";
-                editBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    editEvent(dateKey, lab, event.id);
-                };
-                
-                const timeBtn = document.createElement("button");
-                timeBtn.className = "time-btn";
-                timeBtn.innerHTML = "⏱️";
-                timeBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    adjustEventTime(dateKey, lab, event.id, event);
-                };
-                
-                const deleteBtn = document.createElement("button");
-                deleteBtn.className = "delete-btn";
-                deleteBtn.innerHTML = "🗑️";
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    deleteEvent(dateKey, lab, event.id);
-                };
-                
-                controls.appendChild(editBtn);
-                controls.appendChild(timeBtn);
-                controls.appendChild(deleteBtn);
-                block.appendChild(controls);
-                
-                startCell.appendChild(block);
+            const div = document.createElement("div");
+            div.className = "event";
+            div.textContent = title;
+            div.style.backgroundColor = colors[labs.indexOf(lab)];
+            div.dataset.lab = lab;
+            div.dataset.hour = hour;
+            div.dataset.eventId = eventData.eventId || '';
+            div.dataset.rangeStart = eventData.rangeStart || '';
+            div.dataset.rangeEnd = eventData.rangeEnd || '';
+            
+            // Indicador de rango
+            if (eventData.partOfRange) {
+                const rangeIndicator = document.createElement("div");
+                rangeIndicator.className = "event-range-indicator";
+                div.appendChild(rangeIndicator);
             }
-        });
+            
+            // Controles de edición
+            const controls = document.createElement("div");
+            controls.className = "edit-controls";
+            
+            const editBtn = document.createElement("button");
+            editBtn.className = "edit-btn";
+            editBtn.innerHTML = "✏️";
+            editBtn.onclick = (e) => {
+                e.stopPropagation();
+                editEvent(dateKey, lab, hour, eventData);
+            };
+            
+            // NUEVO: Botón para ajustar horario
+            const timeBtn = document.createElement("button");
+            timeBtn.className = "time-btn";
+            timeBtn.innerHTML = "⏱️";
+            timeBtn.onclick = (e) => {
+                e.stopPropagation();
+                adjustEventTime(dateKey, lab, hour, eventData);
+            };
+            
+            const duplicateBtn = document.createElement("button");
+            duplicateBtn.className = "duplicate-btn";
+            duplicateBtn.innerHTML = "📋";
+            duplicateBtn.onclick = (e) => {
+                e.stopPropagation();
+                duplicateEvent(dateKey, lab, hour, eventData);
+            };
+            
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "delete-btn";
+            deleteBtn.innerHTML = "🗑️";
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteEvent(dateKey, lab, hour, eventData);
+            };
+            
+            controls.appendChild(editBtn);
+            controls.appendChild(timeBtn);
+            controls.appendChild(duplicateBtn);
+            controls.appendChild(deleteBtn);
+            div.appendChild(controls);
+            
+            // Manija de redimensionamiento
+            const resizeHandle = document.createElement("div");
+            resizeHandle.className = "resize-handle";
+            div.appendChild(resizeHandle);
+            
+            td.appendChild(div);
+        }
     });
+    
+    initializeDragAndDrop();
 }
 
-function editEvent(dateKey, lab, eventId) {
-    if (!events[dateKey] || !events[dateKey][lab] || !events[dateKey][lab][eventId]) return;
+// NUEVA FUNCIÓN: Ajustar horario de un evento con precisión de 30 minutos
+function adjustEventTime(dateKey, lab, hour, eventData) {
+    // Determinar hora de inicio y fin actuales
+    let startHour = parseInt(hour);
+    let startMinute = 0;
+    let endHour = startHour + 1;
+    let endMinute = 0;
     
-    const newTitle = prompt("Editar título:", events[dateKey][lab][eventId].title);
-    if (newTitle) {
-        events[dateKey][lab][eventId].title = newTitle;
-        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-        renderDayView();
+    // Si el evento tiene información de rango
+    if (eventData.rangeStart !== undefined && eventData.rangeEnd !== undefined) {
+        startHour = parseInt(eventData.rangeStart);
+        endHour = parseInt(eventData.rangeEnd) + 1;
+    }
+    
+    const newStart = prompt("Hora de inicio (ej: 9:30 o 14:00):", `${startHour}:${startMinute.toString().padStart(2,'0')}`);
+    
+    if (newStart) {
+        const newEnd = prompt("Hora de fin (ej: 12:30 o 16:00):", `${endHour}:${endMinute.toString().padStart(2,'0')}`);
         
-        if (currentView === 'semanal') {
-            renderWeekView();
+        if (newEnd) {
+            // Parsear horas y minutos
+            let startParts = newStart.split(':');
+            let endParts = newEnd.split(':');
+            
+            let newStartHour = parseInt(startParts[0]);
+            let newStartMinute = startParts.length > 1 ? parseInt(startParts[1]) : 0;
+            let newEndHour = parseInt(endParts[0]);
+            let newEndMinute = endParts.length > 1 ? parseInt(endParts[1]) : 0;
+            
+            // Validar que sean números válidos
+            if (!isNaN(newStartHour) && !isNaN(newStartMinute) && !isNaN(newEndHour) && !isNaN(newEndMinute)) {
+                // Validar rangos
+                if (newStartHour >= 8 && newStartHour <= 21 && newEndHour >= 8 && newEndHour <= 22 &&
+                    newStartMinute >= 0 && newStartMinute <= 30 && newStartMinute % 30 === 0 &&
+                    newEndMinute >= 0 && newEndMinute <= 30 && newEndMinute % 30 === 0) {
+                    
+                    // Si es parte de un rango, actualizar todas las partes
+                    if (eventData.eventId) {
+                        // Eliminar todas las horas actuales de este evento
+                        for (let h in events[dateKey][lab]) {
+                            if (events[dateKey][lab][h].eventId === eventData.eventId) {
+                                delete events[dateKey][lab][h];
+                            }
+                        }
+                        
+                        // Calcular la duración en horas
+                        const startTotalMinutes = newStartHour * 60 + newStartMinute;
+                        const endTotalMinutes = newEndHour * 60 + newEndMinute;
+                        const durationHours = Math.ceil((endTotalMinutes - startTotalMinutes) / 60);
+                        
+                        // Crear nuevo rango
+                        const newRangeStart = newStartHour;
+                        const newRangeEnd = newStartHour + durationHours - 1;
+                        
+                        for (let h = newRangeStart; h <= newRangeEnd; h++) {
+                            if (h >= 8 && h <= 21) {
+                                events[dateKey][lab][h] = {
+                                    title: eventData.title,
+                                    duration: 1,
+                                    eventId: eventData.eventId,
+                                    partOfRange: true,
+                                    rangeStart: newRangeStart,
+                                    rangeEnd: newRangeEnd,
+                                    startMinute: h === newRangeStart ? newStartMinute : 0,
+                                    endMinute: h === newRangeEnd ? newEndMinute : 0
+                                };
+                            }
+                        }
+                    } else {
+                        // Evento individual, actualizar directamente
+                        events[dateKey][lab][hour].startHour = newStartHour;
+                        events[dateKey][lab][hour].startMinute = newStartMinute;
+                        events[dateKey][lab][hour].endHour = newEndHour;
+                        events[dateKey][lab][hour].endMinute = newEndMinute;
+                    }
+                    
+                    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                    renderEvents();
+                    initializeDragAndDrop();
+                    
+                    if (currentView === 'semanal' && weekCalendar) {
+                        renderWeekView();
+                    }
+                } else {
+                    alert("Horas inválidas. Usa horas entre 8-22 y minutos en :00 o :30");
+                }
+            }
         }
     }
 }
 
-function adjustEventTime(dateKey, lab, eventId, event) {
-    const newStart = prompt("Hora de inicio (ej: 9:30):", `${event.startHour}:${event.startMinute.toString().padStart(2,'0')}`);
-    const newEnd = prompt("Hora de fin (ej: 12:30):", `${event.endHour}:${event.endMinute.toString().padStart(2,'0')}`);
-    
-    if (newStart && newEnd) {
-        const [startH, startM] = newStart.split(':').map(Number);
-        const [endH, endM] = newEnd.split(':').map(Number);
+// Funciones de edición
+function editEvent(dateKey, lab, hour, eventData) {
+    const newTitle = prompt("Editar evento:", eventData.title);
+    if (newTitle) {
+        // Si es parte de un rango, editar todas las partes
+        if (eventData.eventId) {
+            for (let h in events[dateKey][lab]) {
+                if (events[dateKey][lab][h].eventId === eventData.eventId) {
+                    events[dateKey][lab][h].title = newTitle;
+                }
+            }
+        } else {
+            events[dateKey][lab][hour].title = newTitle;
+        }
+        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+        renderEvents();
+        initializeDragAndDrop();
+    }
+}
+
+function duplicateEvent(dateKey, lab, hour, eventData) {
+    const newHour = prompt("¿A qué hora duplicar este evento? (8-21):", hour);
+    if (newHour && newHour >= 8 && newHour <= 21) {
+        if (!events[dateKey]) events[dateKey] = {};
+        if (!events[dateKey][lab]) events[dateKey][lab] = {};
         
-        if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
-            events[dateKey][lab][eventId].startHour = startH;
-            events[dateKey][lab][eventId].startMinute = startM || 0;
-            events[dateKey][lab][eventId].endHour = endH;
-            events[dateKey][lab][eventId].endMinute = endM || 0;
+        events[dateKey][lab][newHour] = { 
+            ...eventData, 
+            eventId: generateEventId(),
+            partOfRange: false 
+        };
+        
+        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+        renderEvents();
+        initializeDragAndDrop();
+    }
+}
+
+function deleteEvent(dateKey, lab, hour, eventData) {
+    if (confirm("¿Eliminar este evento?")) {
+        // Si es parte de un rango, eliminar todo el rango
+        if (eventData.eventId) {
+            for (let h in events[dateKey][lab]) {
+                if (events[dateKey][lab][h].eventId === eventData.eventId) {
+                    delete events[dateKey][lab][h];
+                }
+            }
+        } else {
+            delete events[dateKey][lab][hour];
+        }
+        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+        renderEvents();
+        initializeDragAndDrop();
+    }
+}
+
+// Inicializar drag & drop con interact.js
+function initializeDragAndDrop() {
+    interact('.event').draggable({
+        inertia: true,
+        modifiers: [
+            interact.modifiers.restrictRect({
+                restriction: '#calendarContainer',
+                endOnly: true
+            })
+        ],
+        autoScroll: true,
+        listeners: {
+            start(event) {
+                draggedEvent = event.target;
+                draggedEvent.classList.add('dragging');
+            },
+            move(event) {
+                const target = event.target;
+                const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+                const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+                
+                target.style.transform = `translate(${x}px, ${y}px)`;
+                target.setAttribute('data-x', x);
+                target.setAttribute('data-y', y);
+            },
+            end(event) {
+                const target = event.target;
+                target.classList.remove('dragging');
+                
+                // Encontrar la celda más cercana
+                const rect = target.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                const cell = document.elementFromPoint(centerX, centerY);
+                
+                if (cell && cell.tagName === 'TD' && cell.dataset.lab && cell.dataset.hour) {
+                    moveEvent(target, cell);
+                }
+                
+                // Resetear posición
+                target.style.transform = '';
+                target.setAttribute('data-x', 0);
+                target.setAttribute('data-y', 0);
+                
+                draggedEvent = null;
+            }
+        }
+    });
+    
+    // Redimensionamiento
+    interact('.resize-handle').draggable({
+        listeners: {
+            move(event) {
+                const eventDiv = event.target.closest('.event');
+                const originalHeight = 58; // Altura base de la celda
+                const deltaY = event.dy;
+                const newHeight = Math.max(originalHeight, eventDiv.offsetHeight + deltaY);
+                
+                eventDiv.style.height = `${newHeight}px`;
+                
+                // Calcular cuántas horas abarca
+                const hoursCovered = Math.ceil(newHeight / originalHeight);
+                
+                // Actualizar el evento en localStorage
+                const lab = eventDiv.dataset.lab;
+                const hour = parseInt(eventDiv.dataset.hour);
+                const dateKey = getCurrentDateKey();
+                const eventId = eventDiv.dataset.eventId;
+                
+                if (events[dateKey] && events[dateKey][lab]) {
+                    // Buscar el evento por ID
+                    for (let h in events[dateKey][lab]) {
+                        if (events[dateKey][lab][h].eventId === eventId) {
+                            // Expandir o contraer el rango
+                            const rangeStart = hour;
+                            const rangeEnd = hour + hoursCovered - 1;
+                            
+                            // Limpiar horas anteriores del mismo evento
+                            for (let oldH in events[dateKey][lab]) {
+                                if (events[dateKey][lab][oldH].eventId === eventId && 
+                                    (oldH < rangeStart || oldH > rangeEnd)) {
+                                    delete events[dateKey][lab][oldH];
+                                }
+                            }
+                            
+                            // Agregar nuevas horas
+                            for (let h = rangeStart; h <= rangeEnd; h++) {
+                                if (h <= 21) {
+                                    events[dateKey][lab][h] = {
+                                        title: events[dateKey][lab][hour].title,
+                                        duration: 1,
+                                        eventId: eventId,
+                                        partOfRange: true,
+                                        rangeStart: rangeStart,
+                                        rangeEnd: rangeEnd
+                                    };
+                                }
+                            }
+                            
+                            localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                            break;
+                        }
+                    }
+                }
+            },
+            end(event) {
+                renderEvents();
+                initializeDragAndDrop();
+            }
+        }
+    });
+}
+
+// Mover evento a nueva celda
+function moveEvent(eventDiv, targetCell) {
+    const oldLab = eventDiv.dataset.lab;
+    const oldHour = eventDiv.dataset.hour;
+    const newLab = targetCell.dataset.lab;
+    const newHour = targetCell.dataset.hour;
+    const dateKey = getCurrentDateKey();
+    const eventId = eventDiv.dataset.eventId;
+    
+    if (events[dateKey] && events[dateKey][oldLab]) {
+        // Buscar el evento completo (rango)
+        const oldEventData = events[dateKey][oldLab][oldHour];
+        
+        if (oldEventData && oldEventData.eventId) {
+            // Mover todas las partes del rango
+            const rangeStart = parseInt(oldEventData.rangeStart || oldHour);
+            const rangeEnd = parseInt(oldEventData.rangeEnd || oldHour);
+            const hourDiff = newHour - oldHour;
+            
+            // Eliminar evento antiguo
+            for (let h in events[dateKey][oldLab]) {
+                if (events[dateKey][oldLab][h].eventId === eventId) {
+                    delete events[dateKey][oldLab][h];
+                }
+            }
+            
+            // Crear evento en nueva ubicación
+            if (!events[dateKey][newLab]) events[dateKey][newLab] = {};
+            
+            for (let h = rangeStart; h <= rangeEnd; h++) {
+                const newH = h + hourDiff;
+                if (newH >= 8 && newH <= 21) {
+                    events[dateKey][newLab][newH] = {
+                        title: oldEventData.title,
+                        duration: 1,
+                        eventId: eventId,
+                        partOfRange: true,
+                        rangeStart: rangeStart + hourDiff,
+                        rangeEnd: rangeEnd + hourDiff
+                    };
+                }
+            }
             
             localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-            renderDayView();
-            
-            if (currentView === 'semanal') {
-                renderWeekView();
-            }
+            renderEvents();
+            initializeDragAndDrop();
         }
     }
 }
 
-function deleteEvent(dateKey, lab, eventId) {
-    if (!events[dateKey] || !events[dateKey][lab] || !events[dateKey][lab][eventId]) return;
-    
-    if (confirm("¿Eliminar este bloque?")) {
-        delete events[dateKey][lab][eventId];
-        
-        if (Object.keys(events[dateKey][lab]).length === 0) {
-            delete events[dateKey][lab];
-        }
-        if (Object.keys(events[dateKey]).length === 0) {
-            delete events[dateKey];
-        }
-        
-        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-        renderDayView();
-        
-        if (currentView === 'semanal') {
-            renderWeekView();
-        }
-    }
-}
-
-// Renderizar vista semanal
+// Renderizar vista semanal con FullCalendar
 function renderWeekView() {
     if (weekCalendar) {
         weekCalendar.destroy();
@@ -1063,36 +1225,58 @@ function renderWeekView() {
     
     const fcEvents = [];
     
+    // Obtener eventos de la semana
     const startOfWeek = new Date(currentDate);
-    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay() + 1);
-    startOfWeek.setHours(0, 0, 0, 0);
-    
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay() + 1); // Lunes
     const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 7);
-    endOfWeek.setHours(23, 59, 59, 999);
+    endOfWeek.setDate(startOfWeek.getDate() + 6); // Domingo
     
     for (let date in events) {
         const eventDate = new Date(date + 'T12:00:00');
         if (eventDate >= startOfWeek && eventDate <= endOfWeek) {
             for (let lab in events[date]) {
-                for (let eventId in events[date][lab]) {
-                    const event = events[date][lab][eventId];
+                // Agrupar por eventId para no duplicar en la vista
+                const processedEvents = new Set();
+                
+                for (let hour in events[date][lab]) {
+                    const eventData = events[date][lab][hour];
+                    if (eventData.eventId && processedEvents.has(eventData.eventId)) {
+                        continue;
+                    }
                     
-                    const start = `${date}T${event.startHour.toString().padStart(2, '0')}:${(event.startMinute || 0).toString().padStart(2, '0')}:00`;
-                    const end = `${date}T${event.endHour.toString().padStart(2, '0')}:${(event.endMinute || 0).toString().padStart(2, '0')}:00`;
+                    if (eventData.eventId) {
+                        processedEvents.add(eventData.eventId);
+                    }
+                    
+                    const title = typeof eventData === 'string' ? eventData : eventData.title;
+                    
+                    // Mejorar el cálculo de horas con minutos
+                    const startHour = eventData.rangeStart || parseInt(hour);
+                    const endHour = (eventData.rangeEnd || parseInt(hour)) + 1;
+                    
+                    // Usar minutos si están disponibles
+                    const startMinute = eventData.startMinute || 0;
+                    const endMinute = eventData.endMinute || 0;
+                    
+                    const start = `${date}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
+                    const end = `${date}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
                     
                     fcEvents.push({
-                        id: event.id,
-                        title: event.title,
-                        start: start,
-                        end: end,
-                        color: event.color || colors[labs.indexOf(lab)],
+                        title,
+                        start,
+                        end,
+                        color: colors[labs.indexOf(lab)],
+                        allDay: false,
                         extendedProps: {
                             lab: lab,
+                            eventId: eventData.eventId,
                             date: date,
-                            eventId: event.id
+                            startMinute: startMinute,
+                            endMinute: endMinute
                         }
                     });
+                    
+                    break; // Solo una vez por evento
                 }
             }
         }
@@ -1111,50 +1295,84 @@ function renderWeekView() {
         slotMinTime: '08:00:00',
         slotMaxTime: '22:00:00',
         allDaySlot: false,
-        slotDuration: '00:30:00',
-        firstDay: 1,
+        slotDuration: '00:30:00', // Cambiado a 30 minutos para permitir mejor visualización
+        firstDay: 1, // Lunes
         eventClick: function(info) {
+            const action = prompt("1: Editar título\n2: Ajustar horario\n3: Eliminar\n0: Cancelar");
             const lab = info.event.extendedProps.lab;
-            const date = info.event.extendedProps.date;
             const eventId = info.event.extendedProps.eventId;
-            
-            const action = prompt("1: Editar título\n2: Ajustar horario\n3: Eliminar");
+            const date = info.event.extendedProps.date;
             
             if (action === "1") {
-                if (events[date] && events[date][lab] && events[date][lab][eventId]) {
-                    const newTitle = prompt("Nuevo título:", info.event.title);
-                    if (newTitle) {
-                        events[date][lab][eventId].title = newTitle;
+                const newTitle = prompt("Nuevo título:", info.event.title);
+                if (newTitle) {
+                    if (events[date] && events[date][lab]) {
+                        for (let h in events[date][lab]) {
+                            if (events[date][lab][h].eventId === eventId) {
+                                events[date][lab][h].title = newTitle;
+                            }
+                        }
                         localStorage.setItem("labDashboardEvents", JSON.stringify(events));
                         renderWeekView();
                     }
                 }
             } else if (action === "2") {
-                if (events[date] && events[date][lab] && events[date][lab][eventId]) {
-                    const event = events[date][lab][eventId];
-                    const newStart = prompt("Nueva hora de inicio (ej: 9:30):", `${event.startHour}:${(event.startMinute || 0).toString().padStart(2,'0')}`);
-                    const newEnd = prompt("Nueva hora de fin (ej: 12:30):", `${event.endHour}:${(event.endMinute || 0).toString().padStart(2,'0')}`);
-                    
-                    if (newStart && newEnd) {
-                        const [startH, startM] = newStart.split(':').map(Number);
-                        const [endH, endM] = newEnd.split(':').map(Number);
-                        
-                        if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
-                            events[date][lab][eventId].startHour = startH;
-                            events[date][lab][eventId].startMinute = startM || 0;
-                            events[date][lab][eventId].endHour = endH;
-                            events[date][lab][eventId].endMinute = endM || 0;
+                // Ajustar horario con precisión de 30 minutos
+                if (events[date] && events[date][lab]) {
+                    // Encontrar el evento
+                    for (let h in events[date][lab]) {
+                        if (events[date][lab][h].eventId === eventId) {
+                            const eventData = events[date][lab][h];
                             
-                            localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-                            renderWeekView();
+                            const startHour = eventData.rangeStart || parseInt(h);
+                            const endHour = (eventData.rangeEnd || parseInt(h)) + 1;
+                            const startMinute = eventData.startMinute || 0;
+                            const endMinute = eventData.endMinute || 0;
+                            
+                            const newStart = prompt("Hora de inicio (ej: 9:30):", `${startHour}:${startMinute.toString().padStart(2,'0')}`);
+                            const newEnd = prompt("Hora de fin (ej: 12:30):", `${endHour}:${endMinute.toString().padStart(2,'0')}`);
+                            
+                            if (newStart && newEnd) {
+                                let startParts = newStart.split(':');
+                                let endParts = newEnd.split(':');
+                                
+                                let newStartHour = parseInt(startParts[0]);
+                                let newStartMinute = startParts.length > 1 ? parseInt(startParts[1]) : 0;
+                                let newEndHour = parseInt(endParts[0]);
+                                let newEndMinute = endParts.length > 1 ? parseInt(endParts[1]) : 0;
+                                
+                                if (!isNaN(newStartHour) && !isNaN(newStartMinute) && !isNaN(newEndHour) && !isNaN(newEndMinute)) {
+                                    // Actualizar todas las partes del evento
+                                    for (let h2 in events[date][lab]) {
+                                        if (events[date][lab][h2].eventId === eventId) {
+                                            if (h2 === h) {
+                                                events[date][lab][h2].startHour = newStartHour;
+                                                events[date][lab][h2].startMinute = newStartMinute;
+                                                events[date][lab][h2].endHour = newEndHour;
+                                                events[date][lab][h2].endMinute = newEndMinute;
+                                            }
+                                        }
+                                    }
+                                    
+                                    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                                    renderWeekView();
+                                }
+                            }
+                            break;
                         }
                     }
                 }
             } else if (action === "3") {
-                if (confirm("¿Eliminar este bloque?")) {
-                    delete events[date][lab][eventId];
-                    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-                    renderWeekView();
+                if (confirm("¿Eliminar evento?")) {
+                    if (events[date] && events[date][lab]) {
+                        for (let h in events[date][lab]) {
+                            if (events[date][lab][h].eventId === eventId) {
+                                delete events[date][lab][h];
+                            }
+                        }
+                        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                        renderWeekView();
+                    }
                 }
             }
         },
@@ -1170,19 +1388,18 @@ function renderWeekView() {
                     const title = prompt(`Nuevo evento en ${lab} - ${hour}:${minute.toString().padStart(2,'0')}`, "");
                     
                     if (title) {
-                        const eventId = generateEventId();
-                        
                         if (!events[dateKey]) events[dateKey] = {};
                         if (!events[dateKey][lab]) events[dateKey][lab] = {};
                         
-                        events[dateKey][lab][eventId] = {
-                            id: eventId,
-                            title: title,
-                            startHour: hour,
+                        // Crear evento con hora exacta
+                        const eventId = generateEventId();
+                        events[dateKey][lab][hour] = { 
+                            title, 
+                            duration: 1,
+                            eventId: eventId,
                             startMinute: minute,
                             endHour: hour + 1,
-                            endMinute: minute,
-                            color: colors[labs.indexOf(lab)]
+                            endMinute: minute
                         };
                         
                         localStorage.setItem("labDashboardEvents", JSON.stringify(events));
@@ -1196,108 +1413,7 @@ function renderWeekView() {
     weekCalendar.render();
 }
 
-// Abrir modal con calendario mensual
-function openModalLab(lab) {
-    modal.style.display = "flex";
-    modalTitle.textContent = `Calendario Mensual - ${lab}`;
-    monthCalendarEl.innerHTML = "";
-    
-    const calendarEl = document.createElement("div");
-    calendarEl.style.height = "100%";
-    monthCalendarEl.appendChild(calendarEl);
-
-    const fcEvents = [];
-    
-    for (let date in events) {
-        if (events[date] && events[date][lab]) {
-            for (let eventId in events[date][lab]) {
-                const event = events[date][lab][eventId];
-                
-                const start = `${date}T${event.startHour.toString().padStart(2, '0')}:${(event.startMinute || 0).toString().padStart(2, '0')}:00`;
-                const end = `${date}T${event.endHour.toString().padStart(2, '0')}:${(event.endMinute || 0).toString().padStart(2, '0')}:00`;
-                
-                fcEvents.push({
-                    id: event.id,
-                    title: event.title,
-                    start: start,
-                    end: end,
-                    color: event.color || colors[labs.indexOf(lab)],
-                    allDay: false
-                });
-            }
-        }
-    }
-
-    if (monthCalendar) {
-        monthCalendar.destroy();
-    }
-    
-    monthCalendar = new FullCalendar.Calendar(calendarEl, {
-        locale: 'es',
-        initialView: 'dayGridMonth',
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay'
-        },
-        events: fcEvents,
-        height: '100%',
-        eventClick: function(info) {
-            const eventId = info.event.id;
-            
-            for (let date in events) {
-                for (let l in events[date]) {
-                    for (let eid in events[date][l]) {
-                        if (eid === eventId) {
-                            const lab = l;
-                            const dateKey = date;
-                            
-                            const action = prompt("1: Editar título\n2: Ajustar horario\n3: Eliminar");
-                            
-                            if (action === "1") {
-                                const newTitle = prompt("Nuevo título:", info.event.title);
-                                if (newTitle) {
-                                    events[dateKey][lab][eventId].title = newTitle;
-                                    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-                                    monthCalendar.refetchEvents();
-                                }
-                            } else if (action === "2") {
-                                const event = events[dateKey][lab][eventId];
-                                const newStart = prompt("Nueva hora de inicio (ej: 9:30):", `${event.startHour}:${(event.startMinute || 0).toString().padStart(2,'0')}`);
-                                const newEnd = prompt("Nueva hora de fin (ej: 12:30):", `${event.endHour}:${(event.endMinute || 0).toString().padStart(2,'0')}`);
-                                
-                                if (newStart && newEnd) {
-                                    const [startH, startM] = newStart.split(':').map(Number);
-                                    const [endH, endM] = newEnd.split(':').map(Number);
-                                    
-                                    if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
-                                        events[dateKey][lab][eventId].startHour = startH;
-                                        events[dateKey][lab][eventId].startMinute = startM || 0;
-                                        events[dateKey][lab][eventId].endHour = endH;
-                                        events[dateKey][lab][eventId].endMinute = endM || 0;
-                                        
-                                        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-                                        monthCalendar.refetchEvents();
-                                    }
-                                }
-                            } else if (action === "3") {
-                                if (confirm("¿Eliminar este bloque?")) {
-                                    delete events[dateKey][lab][eventId];
-                                    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
-                                    monthCalendar.refetchEvents();
-                                }
-                            }
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-    });
-    
-    monthCalendar.render();
-}
-
+// Lista lateral de laboratorios
 labs.forEach((lab, i) => {
     const div = document.createElement("div");
     div.className = "lab";
@@ -1310,10 +1426,160 @@ labs.forEach((lab, i) => {
     labList.appendChild(div);
 });
 
+// Abrir modal con calendario mensual
+function openModalLab(lab) {
+    modal.style.display = "flex";
+    modalTitle.textContent = `Calendario Mensual - ${lab}`;
+    monthCalendar.innerHTML = "";
+    
+    const calendarEl = document.createElement("div");
+    calendarEl.style.height = "100%";
+    monthCalendar.appendChild(calendarEl);
+
+    const fcEvents = [];
+    for (let date in events) {
+        if (events[date][lab]) {
+            const processedEvents = new Set();
+            
+            for (let hour in events[date][lab]) {
+                const eventData = events[date][lab][hour];
+                if (eventData.eventId && processedEvents.has(eventData.eventId)) {
+                    continue;
+                }
+                
+                if (eventData.eventId) {
+                    processedEvents.add(eventData.eventId);
+                }
+                
+                const title = typeof eventData === 'string' ? eventData : eventData.title;
+                
+                const startHour = eventData.rangeStart || parseInt(hour);
+                const endHour = (eventData.rangeEnd || parseInt(hour)) + 1;
+                const startMinute = eventData.startMinute || 0;
+                const endMinute = eventData.endMinute || 0;
+                
+                const start = `${date}T${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
+                const end = `${date}T${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}:00`;
+                
+                fcEvents.push({
+                    title,
+                    start,
+                    end,
+                    color: colors[labs.indexOf(lab)],
+                    allDay: false,
+                    extendedProps: {
+                        lab: lab,
+                        eventId: eventData.eventId,
+                        date: date
+                    }
+                });
+            }
+        }
+    }
+
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        locale: 'es',
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        events: fcEvents,
+        height: '100%',
+        slotMinTime: '08:00:00',
+        slotMaxTime: '22:00:00',
+        allDaySlot: false,
+        slotDuration: '00:30:00',
+        eventClick: function(info) {
+            const action = prompt("1: Editar título\n2: Ajustar horario\n3: Eliminar\n0: Cancelar");
+            const lab = info.event.extendedProps.lab;
+            const eventId = info.event.extendedProps.eventId;
+            const date = info.event.extendedProps.date;
+            
+            if (action === "1") {
+                const newTitle = prompt("Nuevo título:", info.event.title);
+                if (newTitle) {
+                    if (events[date] && events[date][lab]) {
+                        for (let h in events[date][lab]) {
+                            if (events[date][lab][h].eventId === eventId) {
+                                events[date][lab][h].title = newTitle;
+                            }
+                        }
+                        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                        calendar.refetchEvents();
+                    }
+                }
+            } else if (action === "2") {
+                // Ajustar horario en vista mensual
+                if (events[date] && events[date][lab]) {
+                    for (let h in events[date][lab]) {
+                        if (events[date][lab][h].eventId === eventId) {
+                            const eventData = events[date][lab][h];
+                            
+                            const startHour = eventData.rangeStart || parseInt(h);
+                            const endHour = (eventData.rangeEnd || parseInt(h)) + 1;
+                            const startMinute = eventData.startMinute || 0;
+                            const endMinute = eventData.endMinute || 0;
+                            
+                            const newStart = prompt("Hora de inicio (ej: 9:30):", `${startHour}:${startMinute.toString().padStart(2,'0')}`);
+                            const newEnd = prompt("Hora de fin (ej: 12:30):", `${endHour}:${endMinute.toString().padStart(2,'0')}`);
+                            
+                            if (newStart && newEnd) {
+                                let startParts = newStart.split(':');
+                                let endParts = newEnd.split(':');
+                                
+                                let newStartHour = parseInt(startParts[0]);
+                                let newStartMinute = startParts.length > 1 ? parseInt(startParts[1]) : 0;
+                                let newEndHour = parseInt(endParts[0]);
+                                let newEndMinute = endParts.length > 1 ? parseInt(endParts[1]) : 0;
+                                
+                                if (!isNaN(newStartHour) && !isNaN(newStartMinute) && !isNaN(newEndHour) && !isNaN(newEndMinute)) {
+                                    // Actualizar todas las partes del evento
+                                    for (let h2 in events[date][lab]) {
+                                        if (events[date][lab][h2].eventId === eventId) {
+                                            if (h2 === h) {
+                                                events[date][lab][h2].startHour = newStartHour;
+                                                events[date][lab][h2].startMinute = newStartMinute;
+                                                events[date][lab][h2].endHour = newEndHour;
+                                                events[date][lab][h2].endMinute = newEndMinute;
+                                            }
+                                        }
+                                    }
+                                    
+                                    localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                                    calendar.refetchEvents();
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            } else if (action === "3") {
+                if (confirm("¿Eliminar evento?")) {
+                    if (events[date] && events[date][lab]) {
+                        for (let h in events[date][lab]) {
+                            if (events[date][lab][h].eventId === eventId) {
+                                delete events[date][lab][h];
+                            }
+                        }
+                        localStorage.setItem("labDashboardEvents", JSON.stringify(events));
+                        calendar.refetchEvents();
+                    }
+                }
+            }
+        }
+    });
+    
+    calendar.render();
+}
+
+// Cerrar modal
 closeModal.addEventListener("click", () => {
     modal.style.display = "none";
 });
 
+// Limpiar día actual
 btnLimpiar.addEventListener("click", () => {
     const dateKey = getCurrentDateKey();
     if (confirm(`¿Eliminar TODOS los eventos del ${formatDate(currentDate)}?`)) {
@@ -1321,13 +1587,14 @@ btnLimpiar.addEventListener("click", () => {
         localStorage.setItem("labDashboardEvents", JSON.stringify(events));
         
         if (currentView === 'diario') {
-            renderDayView();
+            renderEvents();
         } else {
             renderWeekView();
         }
     }
 });
 
+// Cambiar vistas
 viewButtons.forEach(btn => {
     btn.addEventListener("click", () => {
         viewButtons.forEach(b => b.classList.remove("active"));
@@ -1337,7 +1604,8 @@ viewButtons.forEach(btn => {
         if (currentView === 'diario') {
             dayViewContainer.style.display = 'block';
             weekViewContainer.style.display = 'none';
-            renderDayView();
+            renderEvents();
+            initializeDragAndDrop();
         } else {
             dayViewContainer.style.display = 'none';
             weekViewContainer.style.display = 'block';
@@ -1346,6 +1614,7 @@ viewButtons.forEach(btn => {
     });
 });
 
+// Click fuera del modal para cerrar
 window.addEventListener("click", (e) => {
     if (e.target === modal) {
         modal.style.display = "none";
@@ -1355,11 +1624,13 @@ window.addEventListener("click", (e) => {
 // Inicializar
 buildTable();
 updateDateDisplay();
+initializeDragAndDrop();
 
-// Actualizar vistas periódicamente
+// Actualizar eventos cada minuto
 setInterval(() => {
     if (currentView === 'diario') {
-        renderDayView();
+        renderEvents();
+        initializeDragAndDrop();
     } else {
         renderWeekView();
     }
@@ -1367,4 +1638,3 @@ setInterval(() => {
 </script>
 </body>
 </html>
-
