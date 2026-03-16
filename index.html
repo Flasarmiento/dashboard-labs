@@ -14,7 +14,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
 <style>
-/* (Mantén todos tus estilos exactamente igual) */
+/* Todos tus estilos originales se mantienen IGUAL */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -178,6 +178,14 @@ body {
     background: #ff9800;
 }
 
+#btnHorarios {
+    background: #9B59B6;
+}
+
+#btnHorarios:hover {
+    background: #8E44AD;
+}
+
 #calendarContainer {
     flex: 1;
     overflow: auto;
@@ -212,6 +220,7 @@ body {
     padding: 8px 5px;
     font-size: 0.85rem;
     height: 40px;
+    cursor: pointer;
 }
 
 #calendarTable th:first-child {
@@ -221,6 +230,7 @@ body {
     position: sticky;
     left: 0;
     z-index: 15;
+    cursor: default;
 }
 
 #calendarTable td {
@@ -449,6 +459,145 @@ body {
     font-size: 0.8rem;
 }
 
+/* Tooltip personalizado */
+.lab-tooltip {
+    position: fixed;
+    background: #153244;
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    max-width: 350px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    z-index: 10000;
+    pointer-events: none;
+    border-left: 4px solid #FFCC00;
+    display: none;
+}
+
+.lab-tooltip h4 {
+    margin: 0 0 8px 0;
+    color: #FFCC00;
+    font-size: 1rem;
+}
+
+.lab-tooltip p {
+    margin: 5px 0;
+}
+
+.lab-tooltip .tooltip-label {
+    font-weight: bold;
+    color: #8DE2D6;
+}
+
+.lab-tooltip .teacher-schedule-mini {
+    margin-top: 8px;
+    border-top: 1px solid #8DE2D6;
+    padding-top: 5px;
+    font-size: 0.8rem;
+}
+
+/* Modal de horarios de profesores */
+#horariosModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+    backdrop-filter: blur(3px);
+}
+
+#horariosModalContent {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 16px;
+    width: 95%;
+    max-width: 1300px;
+    height: 90%;
+    overflow: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+#horariosModalHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    position: sticky;
+    top: 0;
+    background: white;
+    padding: 10px 0;
+    z-index: 10;
+}
+
+#horariosModalTitle {
+    color: #153244;
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+#closeHorariosModal {
+    background: #153244;
+    color: white;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+#closeHorariosModal:hover {
+    background: #FFCC00;
+    color: #153244;
+}
+
+.teacher-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.teacher-grid th {
+    background: #153244;
+    color: #FFCC00;
+    padding: 10px 5px;
+    position: sticky;
+    top: 60px;
+    z-index: 5;
+    border: 1px solid #2a4a60;
+}
+
+.teacher-grid td {
+    border: 1px solid #ddd;
+    padding: 8px 5px;
+    text-align: center;
+}
+
+.teacher-grid .day-header {
+    background: #8DE2D6;
+    color: #153244;
+    font-weight: bold;
+}
+
+.teacher-grid .turno {
+    background: #f5f5f5;
+    font-weight: 500;
+}
+
+.teacher-grid .sum-row {
+    background: #fff3cd;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     body {
@@ -478,6 +627,14 @@ body {
         width: 100%;
         justify-content: center;
     }
+    
+    .teacher-grid {
+        font-size: 0.7rem;
+    }
+    
+    .teacher-grid th, .teacher-grid td {
+        padding: 5px 2px;
+    }
 }
 
 .fc .fc-toolbar-title {
@@ -486,6 +643,20 @@ body {
 </style>
 </head>
 <body>
+
+<!-- Tooltip flotante -->
+<div id="labTooltip" class="lab-tooltip"></div>
+
+<!-- Modal de Horarios de Profesores -->
+<div id="horariosModal">
+  <div id="horariosModalContent">
+    <div id="horariosModalHeader">
+      <h3 id="horariosModalTitle">👨‍🏫 Horarios de Profesores por Laboratorio</h3>
+      <button id="closeHorariosModal">✕</button>
+    </div>
+    <div id="horariosGridContainer"></div>
+  </div>
+</div>
 
 <div id="sidebar">
   <h2>📋 LABORATORIOS</h2>
@@ -510,6 +681,7 @@ body {
         <button class="btn" data-view="semanal">Vista Semanal</button>
       </div>
       <button class="btn" id="rangeModeBtn">📏 Modo Rango</button>
+      <button class="btn" id="btnHorarios">👨‍🏫 Horarios Profes</button>
       <button class="btn" id="btnLimpiar">🧹 Limpiar día</button>
     </div>
   </div>
@@ -553,7 +725,7 @@ body {
 const labs = ["SUM", "HYS", "TEXTIL", "RA", "ROBÓTICA", "IA", "FINANZAS", "TRANSPORTE", "LOGÍSTICA", "HYS 2", "STREAMING", "ENERGÍA", "SUSTENTABILIDAD", "DIGITAL"];
 const colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEEAD", "#D4A5A5", "#9B59B6", "#3498DB", "#E67E22", "#2ECC71", "#E74C3C", "#1ABC9C", "#F1C40F", "#34495E"];
 const hours = Array.from({length: 14}, (_, i) => 8 + i); // 8:00 a 21:00
-let events = {}; // Ya no cargamos de localStorage aquí
+let events = {};
 let currentView = 'diario';
 let currentDate = new Date();
 let weekCalendar = null;
@@ -568,6 +740,155 @@ let selectedLab = null;
 // Variable para drag & drop
 let draggedEvent = null;
 
+// --- GRILLA COMPLETA DE HORARIOS DE PROFESORES ---
+const teacherSchedule = {
+    "Lunes": {
+        "Mañana (9–13)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "Viera", "IA": "vacante", "LOGÍSTICA": "De la Barrera", "ENERGÍA": "vacante", "FINANZAS": "Abasto", "RA/3D": "Morgani/villagra", "ROBÓTICA": "del Castillo" },
+        "Tarde (14-17)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "Viera/García", "IA": "Cacchione", "LOGÍSTICA": "Liliana", "ENERGÍA": "Salvo", "FINANZAS": "Blanc", "RA/3D": "Morgani", "ROBÓTICA": "" },
+        "Noche (18–21)": { "SUSTENTABILIDAD": "vacante", "HYS": "García", "IA": "Lopez", "LOGÍSTICA": "vacante", "ENERGÍA": "Salvo", "FINANZAS": "Blanc", "RA/3D": "vacante", "ROBÓTICA": "González" },
+        "SUM (17 a 21)": { "SUM": "" }
+    },
+    "Martes": {
+        "Mañana (9–13)": { "SUSTENTABILIDAD": "Haupt/Ramirez", "HYS": "vacante", "IA": "vacante", "LOGÍSTICA": "De la Barrera", "ENERGÍA": "González", "FINANZAS": "Abasto", "RA/3D": "Morgani/villagra", "ROBÓTICA": "Forni" },
+        "Tarde (14-17)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "vacante", "IA": "Cacchione", "LOGÍSTICA": "vacante", "ENERGÍA": "vacante", "FINANZAS": "Blanc", "RA/3D": "Morgani", "ROBÓTICA": "Mosquera" },
+        "Noche (18–21)": { "SUSTENTABILIDAD": "vacante", "HYS": "vacante", "IA": "López", "LOGÍSTICA": "vacante", "ENERGÍA": "vacante", "FINANZAS": "", "RA/3D": "vacante", "ROBÓTICA": "" },
+        "SUM (17 a 21)": { "SUM": "" }
+    },
+    "Miércoles": {
+        "Mañana (9–13)": { "SUSTENTABILIDAD": "Ramirez/Haupt", "HYS": "Viera", "IA": "Cacchione", "LOGÍSTICA": "De la Barrera", "ENERGÍA": "vacante", "FINANZAS": "Abasto", "RA/3D": "Villagra", "ROBÓTICA": "del Castillo" },
+        "Tarde (14-17)": { "SUSTENTABILIDAD": "Haupt", "HYS": "Viera/García", "IA": "vacante", "LOGÍSTICA": "Liliana", "ENERGÍA": "Salvo", "FINANZAS": "", "RA/3D": "Morgani", "ROBÓTICA": "Mosquera" },
+        "Noche (18–21)": { "SUSTENTABILIDAD": "Haupt", "HYS": "García", "IA": "Lopez", "LOGÍSTICA": "vacante", "ENERGÍA": "Salvo", "FINANZAS": "Blanc", "RA/3D": "vacante", "ROBÓTICA": "González" },
+        "SUM (17 a 21)": { "SUM": "Salvo" }
+    },
+    "Jueves": {
+        "Mañana (9–13)": { "SUSTENTABILIDAD": "Haupt/Ramirez", "HYS": "vacante", "IA": "vacante", "LOGÍSTICA": "De la Barrera", "ENERGÍA": "Gonzalez", "FINANZAS": "Abasto", "RA/3D": "Morgani/villagra", "ROBÓTICA": "Forni" },
+        "Tarde (14-17)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "vacante", "IA": "Cacchione", "LOGÍSTICA": "Liliana", "ENERGÍA": "vacante", "FINANZAS": "", "RA/3D": "Morgani", "ROBÓTICA": "" },
+        "Noche (18–21)": { "SUSTENTABILIDAD": "vacante", "HYS": "vacante", "IA": "Lopez", "LOGÍSTICA": "vacante", "ENERGÍA": "vacante", "FINANZAS": "Blanc", "RA/3D": "vacante", "ROBÓTICA": "Mosquera" },
+        "SUM (17 a 21)": { "SUM": "" }
+    },
+    "Viernes": {
+        "Mañana (9–13)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "Viera", "IA": "vacante", "LOGÍSTICA": "De la Barrera", "ENERGÍA": "vacante", "FINANZAS": "Abasto", "RA/3D": "Morgani/villagra", "ROBÓTICA": "del Castillo" },
+        "Tarde (14-17)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "Viera/García", "IA": "Cacchione", "LOGÍSTICA": "", "ENERGÍA": "Salvo", "FINANZAS": "", "RA/3D": "Morgani", "ROBÓTICA": "" },
+        "Noche (18–21)": { "SUSTENTABILIDAD": "vacante", "HYS": "García", "IA": "Lopez", "LOGÍSTICA": "vacante", "ENERGÍA": "Salvo", "FINANZAS": "Blanc", "RA/3D": "vacante", "ROBÓTICA": "González" },
+        "SUM (17 a 21)": { "SUM": "" }
+    }
+};
+
+// Mapeo de nombres de laboratorios en la grilla a los nombres en el sistema
+const labNameMapping = {
+    "SUSTENTABILIDAD": "SUSTENTABILIDAD",
+    "HYS": "HYS",
+    "IA": "IA",
+    "LOGÍSTICA": "LOGÍSTICA",
+    "ENERGÍA": "ENERGÍA",
+    "FINANZAS": "FINANZAS",
+    "RA/3D": "RA",
+    "ROBÓTICA": "ROBÓTICA",
+    "SUM": "SUM"
+};
+
+// --- INFORMACIÓN DE LABORATORIOS (mejorada con horarios) ---
+const labInfo = {
+    "SUM": {
+        piso: "4",
+        descripcion: "SUM",
+        capacidad: "80-100",
+        observaciones: "Configurable",
+        horarios: "Miércoles 17-21: Salvo"
+    },
+    "HYS": {
+        piso: "3",
+        descripcion: "HYS",
+        capacidad: "5",
+        observaciones: "Simuladores",
+        horarios: "Lun/Vie: Viera/García, Mié: Viera"
+    },
+    "TEXTIL": {
+        piso: "3",
+        descripcion: "TEXTIL",
+        capacidad: "8",
+        observaciones: "Notebook",
+        horarios: "Sin horarios asignados"
+    },
+    "RA": {
+        piso: "3",
+        descripcion: "RA",
+        capacidad: "12",
+        observaciones: "zSpace",
+        horarios: "Morgani/villagra (Mañ), Morgani (Tarde)"
+    },
+    "ROBÓTICA": {
+        piso: "3",
+        descripcion: "ROBÓTICA",
+        capacidad: "14",
+        observaciones: "Notebook",
+        horarios: "del Castillo, Forni, Mosquera, González"
+    },
+    "IA": {
+        piso: "3",
+        descripcion: "IA",
+        capacidad: "5",
+        observaciones: "Computadoras gamer",
+        horarios: "Cacchione, Lopez"
+    },
+    "FINANZAS": {
+        piso: "3",
+        descripcion: "FINANZAS",
+        capacidad: "16",
+        observaciones: "Notebook/monitor",
+        horarios: "Abasto (Mañ), Blanc (Tarde/Noche)"
+    },
+    "TRANSPORTE": {
+        piso: "2",
+        descripcion: "CONSTRUCCIONES",
+        capacidad: "4",
+        observaciones: "Simuladores",
+        horarios: "Sin horarios asignados"
+    },
+    "LOGÍSTICA": {
+        piso: "2",
+        descripcion: "LOGÍSTICA",
+        capacidad: "4",
+        observaciones: "Simuladores",
+        horarios: "De la Barrera, Liliana"
+    },
+    "HYS 2": {
+        piso: "2",
+        descripcion: "HYS2",
+        capacidad: "3",
+        observaciones: "Simuladores",
+        horarios: "Viera/García"
+    },
+    "STREAMING": {
+        piso: "2",
+        descripcion: "STREAMING",
+        capacidad: "4",
+        observaciones: "Micrófonos",
+        horarios: "Sin horarios asignados"
+    },
+    "ENERGÍA": {
+        piso: "2",
+        descripcion: "ENERGÍA",
+        capacidad: "24",
+        observaciones: "22 notebook",
+        horarios: "Salvo (Tarde/Noche), González (Mañ)"
+    },
+    "SUSTENTABILIDAD": {
+        piso: "2",
+        descripcion: "SUSTENTABILIDAD",
+        capacidad: "12",
+        observaciones: "Notebook",
+        horarios: "Ramirez, Haupt"
+    },
+    "DIGITAL": {
+        piso: "2",
+        descripcion: "DIGITAL",
+        capacidad: "12",
+        observaciones: "Notebook",
+        horarios: "Sin horarios asignados"
+    }
+};
+
 // Elementos DOM
 const tbody = document.querySelector("#calendarTable tbody");
 const labList = document.getElementById("labList");
@@ -577,6 +898,7 @@ const monthCalendarEl = document.getElementById("monthCalendar");
 const modalTitle = document.getElementById("modalTitle");
 const btnHoy = document.getElementById("btnHoy");
 const btnLimpiar = document.getElementById("btnLimpiar");
+const btnHorarios = document.getElementById("btnHorarios");
 const prevDay = document.getElementById("prevDay");
 const nextDay = document.getElementById("nextDay");
 const currentDateDisplay = document.getElementById("currentDateDisplay");
@@ -588,9 +910,116 @@ const weekCalendarEl = document.getElementById("weekCalendar");
 const rangeModeBtn = document.getElementById("rangeModeBtn");
 const selectionInfo = document.getElementById("selectionInfo");
 const cancelSelection = document.getElementById("cancelSelection");
+const labTooltip = document.getElementById("labTooltip");
+const horariosModal = document.getElementById("horariosModal");
+const closeHorariosModal = document.getElementById("closeHorariosModal");
+const horariosGridContainer = document.getElementById("horariosGridContainer");
+
+// --- FUNCIÓN PARA MOSTRAR LA GRILLA DE HORARIOS ---
+function showTeacherSchedule() {
+    let html = '<table class="teacher-grid">';
+    html += '<tr><th>Día</th><th>Turno</th><th>Sustentabilidad</th><th>HyS</th><th>IA</th><th>Logística</th><th>Energías</th><th>Finanzas</th><th>RA/3D</th><th>Robótica</th><th>SUM</th></tr>';
+    
+    const dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
+    const turnos = ["Mañana (9–13)", "Tarde (14-17)", "Noche (18–21)", "SUM (17 a 21)"];
+    
+    dias.forEach(dia => {
+        let firstRow = true;
+        turnos.forEach(turno => {
+            if (teacherSchedule[dia] && teacherSchedule[dia][turno]) {
+                html += '<tr>';
+                if (firstRow) {
+                    html += `<td rowspan="4" class="day-header">${dia}</td>`;
+                    firstRow = false;
+                }
+                html += `<td class="turno ${turno.includes('SUM') ? 'sum-row' : ''}">${turno}</td>`;
+                html += `<td>${teacherSchedule[dia][turno]["SUSTENTABILIDAD"] || ''}</td>`;
+                html += `<td>${teacherSchedule[dia][turno]["HYS"] || ''}</td>`;
+                html += `<td>${teacherSchedule[dia][turno]["IA"] || ''}</td>`;
+                html += `<td>${teacherSchedule[dia][turno]["LOGÍSTICA"] || ''}</td>`;
+                html += `<td>${teacherSchedule[dia][turno]["ENERGÍA"] || ''}</td>`;
+                html += `<td>${teacherSchedule[dia][turno]["FINANZAS"] || ''}</td>`;
+                html += `<td>${teacherSchedule[dia][turno]["RA/3D"] || ''}</td>`;
+                html += `<td>${teacherSchedule[dia][turno]["ROBÓTICA"] || ''}</td>`;
+                html += `<td>${teacherSchedule[dia][turno]["SUM"] || ''}</td>`;
+                html += '</tr>';
+            }
+        });
+    });
+    
+    html += '</table>';
+    horariosGridContainer.innerHTML = html;
+    horariosModal.style.display = 'flex';
+}
+
+// --- FUNCIÓN PARA OBTENER HORARIOS DE UN LABORATORIO ESPECÍFICO ---
+function getLabSchedule(labName) {
+    let schedule = [];
+    const dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
+    const turnos = ["Mañana (9–13)", "Tarde (14-17)", "Noche (18–21)"];
+    
+    // Mapear el nombre del laboratorio al nombre en la grilla
+    let gridLabName = labName;
+    if (labName === "RA") gridLabName = "RA/3D";
+    if (labName === "HYS 2") gridLabName = "HYS"; // HYS 2 comparte horarios con HYS
+    if (labName === "TRANSPORTE") return []; // No tiene horarios
+    
+    dias.forEach(dia => {
+        turnos.forEach(turno => {
+            if (teacherSchedule[dia] && teacherSchedule[dia][turno]) {
+                const teacher = teacherSchedule[dia][turno][gridLabName];
+                if (teacher && teacher.trim() !== "" && teacher !== "vacante") {
+                    schedule.push(`${dia} ${turno}: ${teacher}`);
+                }
+            }
+        });
+        // También verificar SUM si aplica
+        if (labName === "SUM" && teacherSchedule[dia]["SUM (17 a 21)"]) {
+            const teacher = teacherSchedule[dia]["SUM (17 a 21)"]["SUM"];
+            if (teacher && teacher.trim() !== "") {
+                schedule.push(`${dia} SUM (17-21): ${teacher}`);
+            }
+        }
+    });
+    
+    return schedule;
+}
+
+// --- FUNCIÓN MEJORADA PARA EL TOOLTIP ---
+function showLabTooltip(labName, event) {
+    const info = labInfo[labName];
+    if (!info) return;
+    
+    const labSchedule = getLabSchedule(labName);
+    
+    let scheduleHtml = '';
+    if (labSchedule.length > 0) {
+        scheduleHtml = '<div class="teacher-schedule-mini"><span class="tooltip-label">📅 Horarios:</span><ul style="margin:5px 0 0 15px; padding-left:0;">';
+        labSchedule.forEach(item => {
+            scheduleHtml += `<li style="list-style-type: circle;">${item}</li>`;
+        });
+        scheduleHtml += '</ul></div>';
+    }
+    
+    labTooltip.innerHTML = `
+        <h4>${labName}</h4>
+        <p><span class="tooltip-label">📍 Piso:</span> ${info.piso}</p>
+        <p><span class="tooltip-label">📝 Descripción:</span> ${info.descripcion}</p>
+        <p><span class="tooltip-label">👥 Capacidad:</span> ${info.capacidad} puestos</p>
+        <p><span class="tooltip-label">💻 Obs.:</span> ${info.observaciones}</p>
+        ${scheduleHtml}
+    `;
+    
+    labTooltip.style.display = 'block';
+    labTooltip.style.left = (event.pageX + 15) + 'px';
+    labTooltip.style.top = (event.pageY - 50) + 'px';
+}
+
+function hideLabTooltip() {
+    labTooltip.style.display = 'none';
+}
 
 // --- INICIALIZACIÓN DE FIREBASE ---
-// Tu configuración de Firebase (la que me diste)
 const firebaseConfig = {
   apiKey: "AIzaSyCHnu_cC8x8pYDNs3Ji8xeRfiqn6dHoiQI",
   authDomain: "calendario-reservas-26959.firebaseapp.com",
@@ -605,9 +1034,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// --- FUNCIONES PARA FIREBASE (Guardar y Cargar) ---
-
-// Cargar eventos desde Firestore
+// --- FUNCIONES PARA FIREBASE ---
 async function loadEventsFromFirebase() {
     try {
         const docRef = db.collection("calendario").doc("eventos");
@@ -618,28 +1045,22 @@ async function loadEventsFromFirebase() {
             return docSnap.data().events || {};
         } else {
             console.log("No hay eventos guardados, creando documento inicial...");
-            // Si no existe, creamos un objeto vacío en Firebase
             await db.collection("calendario").doc("eventos").set({ events: {} });
             return {};
         }
     } catch (error) {
         console.error("Error al cargar desde Firebase: ", error);
-        // Si hay error (ej: sin conexión), devolvemos vacío pero mostramos alerta
         alert("Error al conectar con Firebase. Verifica tu conexión a internet.");
         return {};
     }
 }
 
-// Guardar eventos en Firestore (con debounce para no saturar)
 let saveTimeout;
 function saveEventsToFirebase(newEvents) {
-    // Actualizar la variable global
     events = newEvents;
     
-    // Limpiar timeout anterior
     if (saveTimeout) clearTimeout(saveTimeout);
     
-    // Esperar 1 segundo antes de guardar (para no guardar en cada pequeño cambio)
     saveTimeout = setTimeout(async () => {
         try {
             await db.collection("calendario").doc("eventos").set({ events: events });
@@ -651,79 +1072,36 @@ function saveEventsToFirebase(newEvents) {
     }, 1000);
 }
 
-// --- MODIFICAR TODAS LAS FUNCIONES QUE USABAN LOCALSTORAGE ---
-
-// Función para inicializar la app (la llamamos al final)
-async function initializeApp() {
-    // Cargar eventos desde Firebase
-    events = await loadEventsFromFirebase();
-    
-    // Si no hay eventos, crear datos de ejemplo (opcional)
-    if (Object.keys(events).length === 0) {
-        const today = new Date();
-        const currentYear = today.getFullYear();
-        const currentMonth = today.getMonth();
-        
-        for (let day = 1; day <= 28; day++) {
-            const date = new Date(currentYear, currentMonth, day);
-            const dateKey = date.toISOString().split('T')[0];
-            
-            events[dateKey] = {};
-            
-            labs.forEach((lab, index) => {
-                events[dateKey][lab] = {};
-                const startHour = 9 + (index % 5);
-                const eventId = generateEventId();
-                
-                if (day % 2 === 0) {
-                    events[dateKey][lab][eventId] = {
-                        id: eventId,
-                        title: `Clase ${lab}`,
-                        startHour: startHour,
-                        startMinute: 0,
-                        endHour: startHour + 2,
-                        endMinute: 0,
-                        color: colors[index]
-                    };
-                } else {
-                    events[dateKey][lab][eventId] = {
-                        id: eventId,
-                        title: `Taller ${lab}`,
-                        startHour: 14 + (index % 4),
-                        startMinute: 30,
-                        endHour: 14 + (index % 4) + 2,
-                        endMinute: 30,
-                        color: colors[index]
-                    };
-                }
-            });
-        }
-        // Guardar los eventos de ejemplo en Firebase
-        await saveEventsToFirebase(events);
-    }
-    
-    // Construir tabla y actualizar vista
-    buildTable();
-    updateDateDisplay();
-    initializeDragAndDrop();
-    
-    // Iniciar intervalo de actualización
-    setInterval(() => {
-        if (currentView === 'diario') {
-            renderDayView();
-            initializeDragAndDrop();
-        } else {
-            renderWeekView();
-        }
-        if (modal.style.display === 'flex' && monthCalendar) {
-            monthCalendar.refetchEvents();
-        }
-    }, 60000);
+// --- FUNCIONES DE UTILIDAD ---
+function formatDate(date) {
+    return date.toLocaleDateString('es-ES', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    });
 }
 
-// Modificar todas las funciones que guardaban en localStorage
-// para que usen saveEventsToFirebase()
+function updateDateDisplay() {
+    currentDateDisplay.textContent = formatDate(currentDate);
+    datePicker.value = currentDate.toISOString().split('T')[0];
+    
+    if (currentView === 'diario') {
+        renderDayView();
+    } else {
+        renderWeekView();
+    }
+}
 
+function getCurrentDateKey() {
+    return currentDate.toISOString().split("T")[0];
+}
+
+function generateEventId() {
+    return 'evt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// --- FUNCIONES DE MANEJO DE EVENTOS (TODAS IGUALES) ---
 function createSingleEvent(lab, hour, half) {
     const title = prompt(`Nuevo evento en ${lab} - ${hour}:${half.toString().padStart(2,'0')}`, "");
     
@@ -753,7 +1131,7 @@ function createSingleEvent(lab, hour, half) {
             color: colors[labs.indexOf(lab)]
         };
         
-        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        saveEventsToFirebase(events);
         renderDayView();
         if (weekCalendar) renderWeekView();
         if (monthCalendar) monthCalendar.refetchEvents();
@@ -761,7 +1139,6 @@ function createSingleEvent(lab, hour, half) {
     }
 }
 
-// En handleMouseUp (para eventos de rango)
 function handleMouseUp(e) {
     if (!rangeModeActive || !selectionStart.hour) return;
     
@@ -800,7 +1177,7 @@ function handleMouseUp(e) {
             color: colors[labs.indexOf(selectedLab)]
         };
         
-        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        saveEventsToFirebase(events);
         renderDayView();
         if (weekCalendar) renderWeekView();
         if (monthCalendar) monthCalendar.refetchEvents();
@@ -810,21 +1187,19 @@ function handleMouseUp(e) {
     cancelRangeSelection();
 }
 
-// En editEvent
 function editEvent(dateKey, lab, eventId) {
     if (!events[dateKey] || !events[dateKey][lab] || !events[dateKey][lab][eventId]) return;
     
     const newTitle = prompt("Editar título:", events[dateKey][lab][eventId].title);
     if (newTitle) {
         events[dateKey][lab][eventId].title = newTitle;
-        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        saveEventsToFirebase(events);
         renderDayView();
         if (weekCalendar) renderWeekView();
         if (monthCalendar) monthCalendar.refetchEvents();
     }
 }
 
-// En adjustEventTime
 function adjustEventTime(dateKey, lab, eventId, event) {
     const newStart = prompt("Hora de inicio (ej: 9:30):", `${event.startHour}:${event.startMinute.toString().padStart(2,'0')}`);
     const newEnd = prompt("Hora de fin (ej: 12:30):", `${event.endHour}:${event.endMinute.toString().padStart(2,'0')}`);
@@ -839,7 +1214,7 @@ function adjustEventTime(dateKey, lab, eventId, event) {
             events[dateKey][lab][eventId].endHour = endH;
             events[dateKey][lab][eventId].endMinute = endM || 0;
             
-            saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+            saveEventsToFirebase(events);
             renderDayView();
             if (weekCalendar) renderWeekView();
             if (monthCalendar) monthCalendar.refetchEvents();
@@ -847,7 +1222,6 @@ function adjustEventTime(dateKey, lab, eventId, event) {
     }
 }
 
-// En deleteEvent
 function deleteEvent(dateKey, lab, eventId) {
     if (!events[dateKey] || !events[dateKey][lab] || !events[dateKey][lab][eventId]) return;
     
@@ -861,14 +1235,13 @@ function deleteEvent(dateKey, lab, eventId) {
             delete events[dateKey];
         }
         
-        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        saveEventsToFirebase(events);
         renderDayView();
         if (weekCalendar) renderWeekView();
         if (monthCalendar) monthCalendar.refetchEvents();
     }
 }
 
-// En moveEvent (para drag & drop)
 function moveEvent(eventDiv, targetCell) {
     const oldLab = eventDiv.dataset.lab;
     const dateKey = eventDiv.dataset.dateKey;
@@ -908,7 +1281,7 @@ function moveEvent(eventDiv, targetCell) {
             delete events[dateKey][oldLab];
         }
         
-        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        saveEventsToFirebase(events);
         renderDayView();
         if (weekCalendar) renderWeekView();
         if (monthCalendar) monthCalendar.refetchEvents();
@@ -916,12 +1289,11 @@ function moveEvent(eventDiv, targetCell) {
     }
 }
 
-// En btnLimpiar
 btnLimpiar.addEventListener("click", () => {
     const dateKey = getCurrentDateKey();
     if (confirm(`¿Eliminar TODOS los eventos del ${formatDate(currentDate)}?`)) {
         delete events[dateKey];
-        saveEventsToFirebase(events); // CAMBIADO: guardar en Firebase
+        saveEventsToFirebase(events);
         
         if (currentView === 'diario') {
             renderDayView();
@@ -932,66 +1304,7 @@ btnLimpiar.addEventListener("click", () => {
     }
 });
 
-// --- EL RESTO DE TUS FUNCIONES SE QUEDAN IGUAL ---
-// (formatDate, updateDateDisplay, buildTable, handleMouseDown, handleMouseEnter, 
-// clearSelection, cancelRangeSelection, generateEventId, rangeModeBtn, cancelSelection,
-// getCurrentDateKey, renderDayView, renderWeekView, openModalLab, etc.)
-
-// Aquí van todas las demás funciones que ya tenías y que NO modificamos
-// (Las copio desde tu código anterior para completar)
-
-// Formatear fecha para mostrar
-function formatDate(date) {
-    return date.toLocaleDateString('es-ES', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-    });
-}
-
-// Actualizar display de fecha
-function updateDateDisplay() {
-    currentDateDisplay.textContent = formatDate(currentDate);
-    datePicker.value = currentDate.toISOString().split('T')[0];
-    
-    if (currentView === 'diario') {
-        renderDayView();
-    } else {
-        renderWeekView();
-    }
-}
-
-// Navegación de fechas
-prevDay.addEventListener("click", () => {
-    if (currentView === 'diario') {
-        currentDate.setDate(currentDate.getDate() - 1);
-    } else {
-        currentDate.setDate(currentDate.getDate() - 7);
-    }
-    updateDateDisplay();
-});
-
-nextDay.addEventListener("click", () => {
-    if (currentView === 'diario') {
-        currentDate.setDate(currentDate.getDate() + 1);
-    } else {
-        currentDate.setDate(currentDate.getDate() + 7);
-    }
-    updateDateDisplay();
-});
-
-datePicker.addEventListener("change", (e) => {
-    currentDate = new Date(e.target.value + 'T12:00:00');
-    updateDateDisplay();
-});
-
-btnHoy.addEventListener("click", () => {
-    currentDate = new Date();
-    updateDateDisplay();
-});
-
-// Construir tabla diaria con medias horas
+// --- CONSTRUIR TABLA ---
 function buildTable() {
     const thead = document.querySelector("#calendarTable thead tr");
     thead.innerHTML = '<th>Hora</th>';
@@ -1000,13 +1313,27 @@ function buildTable() {
         const th = document.createElement("th");
         th.textContent = lab;
         th.title = lab;
+        
+        th.addEventListener("mouseenter", (e) => {
+            showLabTooltip(lab, e);
+        });
+        th.addEventListener("mouseleave", hideLabTooltip);
+        th.addEventListener("mousemove", (e) => {
+            labTooltip.style.left = (e.pageX + 15) + 'px';
+            labTooltip.style.top = (e.pageY - 50) + 'px';
+        });
+        
+        th.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openModalLab(lab);
+        });
+        
         thead.appendChild(th);
     });
 
     tbody.innerHTML = "";
     
     hours.forEach((h) => {
-        // Fila para :00
         const tr00 = document.createElement("tr");
         const th00 = document.createElement("th");
         th00.textContent = `${h}:00`;
@@ -1034,7 +1361,6 @@ function buildTable() {
         });
         tbody.appendChild(tr00);
         
-        // Fila para :30
         const tr30 = document.createElement("tr");
         labs.forEach(lab => {
             const td = document.createElement("td");
@@ -1058,7 +1384,7 @@ function buildTable() {
     });
 }
 
-// Manejadores para selección de rango
+// --- FUNCIONES DE SELECCIÓN DE RANGO ---
 function handleMouseDown(e) {
     if (!rangeModeActive) return;
     e.preventDefault();
@@ -1119,10 +1445,6 @@ function cancelRangeSelection() {
     clearSelection();
 }
 
-function generateEventId() {
-    return 'evt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-}
-
 rangeModeBtn.addEventListener("click", () => {
     rangeModeActive = !rangeModeActive;
     rangeModeBtn.classList.toggle('active');
@@ -1140,10 +1462,7 @@ cancelSelection.addEventListener("click", () => {
     cancelRangeSelection();
 });
 
-function getCurrentDateKey() {
-    return currentDate.toISOString().split("T")[0];
-}
-
+// --- RENDERIZADO DE VISTAS ---
 function renderDayView() {
     document.querySelectorAll("#calendarTable td").forEach(td => {
         td.innerHTML = '';
@@ -1226,7 +1545,6 @@ function renderDayView() {
     initializeDragAndDrop();
 }
 
-// Inicializar drag & drop con interact.js
 function initializeDragAndDrop() {
     interact('.event-block').draggable({
         inertia: true,
@@ -1277,7 +1595,6 @@ function initializeDragAndDrop() {
     });
 }
 
-// Renderizar vista semanal con FullCalendar
 function renderWeekView() {
     if (weekCalendar) {
         weekCalendar.destroy();
@@ -1442,7 +1759,6 @@ function renderWeekView() {
     weekCalendar.render();
 }
 
-// Abrir modal con calendario mensual
 function openModalLab(lab) {
     modal.style.display = "flex";
     modalTitle.textContent = `Calendario Mensual - ${lab}`;
@@ -1557,20 +1873,41 @@ function openModalLab(lab) {
     monthCalendar.render();
 }
 
+// --- SIDEBAR ---
 labs.forEach((lab, i) => {
     const div = document.createElement("div");
     div.className = "lab";
     div.style.backgroundColor = colors[i];
     div.style.color = "#FFFFFF";
     div.textContent = lab;
+    
+    div.addEventListener("mouseenter", (e) => {
+        showLabTooltip(lab, e);
+    });
+    div.addEventListener("mouseleave", hideLabTooltip);
+    div.addEventListener("mousemove", (e) => {
+        labTooltip.style.left = (e.pageX + 15) + 'px';
+        labTooltip.style.top = (e.pageY - 50) + 'px';
+    });
+    
     div.addEventListener("click", () => {
         openModalLab(lab);
     });
+    
     labList.appendChild(div);
 });
 
+// --- EVENT LISTENERS ---
 closeModal.addEventListener("click", () => {
     modal.style.display = "none";
+});
+
+closeHorariosModal.addEventListener("click", () => {
+    horariosModal.style.display = "none";
+});
+
+btnHorarios.addEventListener("click", () => {
+    showTeacherSchedule();
 });
 
 viewButtons.forEach(btn => {
@@ -1596,11 +1933,103 @@ window.addEventListener("click", (e) => {
     if (e.target === modal) {
         modal.style.display = "none";
     }
+    if (e.target === horariosModal) {
+        horariosModal.style.display = "none";
+    }
+});
+
+prevDay.addEventListener("click", () => {
+    if (currentView === 'diario') {
+        currentDate.setDate(currentDate.getDate() - 1);
+    } else {
+        currentDate.setDate(currentDate.getDate() - 7);
+    }
+    updateDateDisplay();
+});
+
+nextDay.addEventListener("click", () => {
+    if (currentView === 'diario') {
+        currentDate.setDate(currentDate.getDate() + 1);
+    } else {
+        currentDate.setDate(currentDate.getDate() + 7);
+    }
+    updateDateDisplay();
+});
+
+datePicker.addEventListener("change", (e) => {
+    currentDate = new Date(e.target.value + 'T12:00:00');
+    updateDateDisplay();
+});
+
+btnHoy.addEventListener("click", () => {
+    currentDate = new Date();
+    updateDateDisplay();
 });
 
 // --- INICIAR LA APLICACIÓN ---
+async function initializeApp() {
+    events = await loadEventsFromFirebase();
+    
+    if (Object.keys(events).length === 0) {
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth();
+        
+        for (let day = 1; day <= 28; day++) {
+            const date = new Date(currentYear, currentMonth, day);
+            const dateKey = date.toISOString().split('T')[0];
+            
+            events[dateKey] = {};
+            
+            labs.forEach((lab, index) => {
+                events[dateKey][lab] = {};
+                const startHour = 9 + (index % 5);
+                const eventId = generateEventId();
+                
+                if (day % 2 === 0) {
+                    events[dateKey][lab][eventId] = {
+                        id: eventId,
+                        title: `Clase ${lab}`,
+                        startHour: startHour,
+                        startMinute: 0,
+                        endHour: startHour + 2,
+                        endMinute: 0,
+                        color: colors[index]
+                    };
+                } else {
+                    events[dateKey][lab][eventId] = {
+                        id: eventId,
+                        title: `Taller ${lab}`,
+                        startHour: 14 + (index % 4),
+                        startMinute: 30,
+                        endHour: 14 + (index % 4) + 2,
+                        endMinute: 30,
+                        color: colors[index]
+                    };
+                }
+            });
+        }
+        await saveEventsToFirebase(events);
+    }
+    
+    buildTable();
+    updateDateDisplay();
+    initializeDragAndDrop();
+    
+    setInterval(() => {
+        if (currentView === 'diario') {
+            renderDayView();
+            initializeDragAndDrop();
+        } else {
+            renderWeekView();
+        }
+        if (modal.style.display === 'flex' && monthCalendar) {
+            monthCalendar.refetchEvents();
+        }
+    }, 60000);
+}
+
 initializeApp();
 </script>
 </body>
 </html>
-
