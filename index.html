@@ -1046,6 +1046,11 @@ function showLabTooltip(labName, event) {
     labTooltip.style.top = top + 'px';
 }
 
+// --- FUNCIÓN PARA OCULTAR EL TOOLTIP (¡AGREGAR ESTO!) ---
+function hideLabTooltip() {
+    labTooltip.style.display = 'none';
+}
+
 // --- INICIALIZACIÓN DE FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyCHnu_cC8x8pYDNs3Ji8xeRfiqn6dHoiQI",
@@ -2058,5 +2063,6 @@ initializeApp();
 </script>
 </body>
 </html>
+
 
 
