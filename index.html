@@ -985,7 +985,7 @@ function getLabSchedule(labName) {
     return schedule;
 }
 
-// --- FUNCIÓN MEJORADA PARA EL TOOLTIP ---
+// --- FUNCIÓN MEJORADA PARA EL TOOLTIP (CON DETECCIÓN DE LÍMITES DE PANTALLA) ---
 function showLabTooltip(labName, event) {
     const info = labInfo[labName];
     if (!info) return;
@@ -1010,13 +1010,40 @@ function showLabTooltip(labName, event) {
         ${scheduleHtml}
     `;
     
+    // Posicionar el tooltip
     labTooltip.style.display = 'block';
-    labTooltip.style.left = (event.pageX + 15) + 'px';
-    labTooltip.style.top = (event.pageY - 50) + 'px';
-}
-
-function hideLabTooltip() {
-    labTooltip.style.display = 'none';
+    
+    // Calcular posición
+    let left = event.pageX + 15;
+    let top = event.pageY - 50;
+    
+    // Obtener dimensiones del tooltip y la ventana
+    const tooltipRect = labTooltip.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    
+    // Verificar si se sale por la derecha
+    if (left + tooltipRect.width > windowWidth - 10) {
+        left = event.pageX - tooltipRect.width - 15;
+    }
+    
+    // Verificar si se sale por la izquierda
+    if (left < 10) {
+        left = 10;
+    }
+    
+    // Verificar si se sale por abajo
+    if (top + tooltipRect.height > windowHeight - 10) {
+        top = event.pageY - tooltipRect.height - 10;
+    }
+    
+    // Verificar si se sale por arriba
+    if (top < 10) {
+        top = 10;
+    }
+    
+    labTooltip.style.left = left + 'px';
+    labTooltip.style.top = top + 'px';
 }
 
 // --- INICIALIZACIÓN DE FIREBASE ---
@@ -1318,10 +1345,9 @@ function buildTable() {
             showLabTooltip(lab, e);
         });
         th.addEventListener("mouseleave", hideLabTooltip);
-        th.addEventListener("mousemove", (e) => {
-            labTooltip.style.left = (e.pageX + 15) + 'px';
-            labTooltip.style.top = (e.pageY - 50) + 'px';
-        });
+     th.addEventListener("mousemove", (e) => {
+    showLabTooltip(lab, e);
+});
         
         th.addEventListener("click", (e) => {
             e.stopPropagation();
@@ -1886,9 +1912,8 @@ labs.forEach((lab, i) => {
     });
     div.addEventListener("mouseleave", hideLabTooltip);
     div.addEventListener("mousemove", (e) => {
-        labTooltip.style.left = (e.pageX + 15) + 'px';
-        labTooltip.style.top = (e.pageY - 50) + 'px';
-    });
+    showLabTooltip(lab, e);
+});
     
     div.addEventListener("click", () => {
         openModalLab(lab);
@@ -2033,4 +2058,5 @@ initializeApp();
 </script>
 </body>
 </html>
+
 
