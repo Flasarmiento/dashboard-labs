@@ -1624,77 +1624,78 @@ function renderDayView() {
     
     const dateKey = getCurrentDateKey();
     
-    if (!events[dateKey]) return;
-    
-    labs.forEach(lab => {
-        if (!events[dateKey][lab]) return;
-        
-        Object.values(events[dateKey][lab]).forEach(event => {
-            const startHour = event.startHour;
-            const startMinute = event.startMinute || 0;
+    // Mostrar eventos si existen
+    if (events[dateKey]) {
+        labs.forEach(lab => {
+            if (!events[dateKey][lab]) return;
             
-            const startCell = document.querySelector(`td[data-lab="${lab}"][data-hour="${startHour}"][data-half="${startMinute === 30 ? 30 : 0}"]`);
-            
-            if (startCell) {
-                const startMinutes = startHour * 60 + startMinute;
-                const endMinutes = event.endHour * 60 + (event.endMinute || 0);
-                const durationSlots = Math.ceil((endMinutes - startMinutes) / 30);
+            Object.values(events[dateKey][lab]).forEach(event => {
+                const startHour = event.startHour;
+                const startMinute = event.startMinute || 0;
                 
-                const block = document.createElement("div");
-                block.className = "event-block";
-                block.style.backgroundColor = event.color || colors[labs.indexOf(lab)];
-                block.style.height = `calc(${durationSlots * 100}% - 4px)`;
-                block.style.top = '2px';
-                block.dataset.eventId = event.id;
-                block.dataset.lab = lab;
-                block.dataset.dateKey = dateKey;
+                const startCell = document.querySelector(`td[data-lab="${lab}"][data-hour="${startHour}"][data-half="${startMinute === 30 ? 30 : 0}"]`);
                 
-                const titleDiv = document.createElement("div");
-                titleDiv.className = "event-title";
-                titleDiv.textContent = event.title;
-                block.appendChild(titleDiv);
-                
-                const timeDiv = document.createElement("div");
-                timeDiv.className = "event-time";
-                timeDiv.textContent = `${startHour}:${startMinute.toString().padStart(2,'0')} - ${event.endHour}:${(event.endMinute || 0).toString().padStart(2,'0')}`;
-                block.appendChild(timeDiv);
-                
-                const controls = document.createElement("div");
-                controls.className = "edit-controls";
-                
-                const editBtn = document.createElement("button");
-                editBtn.className = "edit-btn";
-                editBtn.innerHTML = "✏️";
-                editBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    editEvent(dateKey, lab, event.id);
-                };
-                
-                const timeBtn = document.createElement("button");
-                timeBtn.className = "time-btn";
-                timeBtn.innerHTML = "⏱️";
-                timeBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    adjustEventTime(dateKey, lab, event.id, event);
-                };
-                
-                const deleteBtn = document.createElement("button");
-                deleteBtn.className = "delete-btn";
-                deleteBtn.innerHTML = "🗑️";
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    deleteEvent(dateKey, lab, event.id);
-                };
-                
-                controls.appendChild(editBtn);
-                controls.appendChild(timeBtn);
-                controls.appendChild(deleteBtn);
-                block.appendChild(controls);
-                
-                startCell.appendChild(block);
-            }
+                if (startCell) {
+                    const startMinutes = startHour * 60 + startMinute;
+                    const endMinutes = event.endHour * 60 + (event.endMinute || 0);
+                    const durationSlots = Math.ceil((endMinutes - startMinutes) / 30);
+                    
+                    const block = document.createElement("div");
+                    block.className = "event-block";
+                    block.style.backgroundColor = event.color || colors[labs.indexOf(lab)];
+                    block.style.height = `calc(${durationSlots * 100}% - 4px)`;
+                    block.style.top = '2px';
+                    block.dataset.eventId = event.id;
+                    block.dataset.lab = lab;
+                    block.dataset.dateKey = dateKey;
+                    
+                    const titleDiv = document.createElement("div");
+                    titleDiv.className = "event-title";
+                    titleDiv.textContent = event.title;
+                    block.appendChild(titleDiv);
+                    
+                    const timeDiv = document.createElement("div");
+                    timeDiv.className = "event-time";
+                    timeDiv.textContent = `${startHour}:${startMinute.toString().padStart(2,'0')} - ${event.endHour}:${(event.endMinute || 0).toString().padStart(2,'0')}`;
+                    block.appendChild(timeDiv);
+                    
+                    const controls = document.createElement("div");
+                    controls.className = "edit-controls";
+                    
+                    const editBtn = document.createElement("button");
+                    editBtn.className = "edit-btn";
+                    editBtn.innerHTML = "✏️";
+                    editBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        editEvent(dateKey, lab, event.id);
+                    };
+                    
+                    const timeBtn = document.createElement("button");
+                    timeBtn.className = "time-btn";
+                    timeBtn.innerHTML = "⏱️";
+                    timeBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        adjustEventTime(dateKey, lab, event.id, event);
+                    };
+                    
+                    const deleteBtn = document.createElement("button");
+                    deleteBtn.className = "delete-btn";
+                    deleteBtn.innerHTML = "🗑️";
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        deleteEvent(dateKey, lab, event.id);
+                    };
+                    
+                    controls.appendChild(editBtn);
+                    controls.appendChild(timeBtn);
+                    controls.appendChild(deleteBtn);
+                    block.appendChild(controls);
+                    
+                    startCell.appendChild(block);
+                }
+            });
         });
-    });
+    }
     
     initializeDragAndDrop();
     
@@ -1713,7 +1714,6 @@ function renderDayView() {
         if (oldOverlay) oldOverlay.remove();
     }
 }
-
 function initializeDragAndDrop() {
     interact('.event-block').draggable({
         inertia: true,
