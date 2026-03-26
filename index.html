@@ -230,7 +230,7 @@ body {
     width: 80px;
     position: sticky;
     left: 0;
-    z-index: 15;
+    z-index: 20;   /* ← aumentado para que quede sobre los eventos */
     cursor: default;
 }
 
@@ -269,7 +269,8 @@ body {
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     z-index: 5;
     border: 1px solid rgba(255,255,255,0.3);
-    overflow-y: auto;
+    overflow-x: hidden;   /* Evita desborde horizontal fuera de la celda */
+    overflow-y: auto;     /* Permite scroll vertical si es necesario */
     transition: all 0.2s;
     pointer-events: auto;
 }
@@ -1657,7 +1658,7 @@ function renderDayView() {
                     block.className = "event-block";
                     block.style.backgroundColor = event.color || colors[labs.indexOf(lab)];
                     block.style.height = `calc(${durationSlots * 100}% - 4px)`;
-                    block.style.top = '2px';
+                    block.style.top = '0px';
                     
                     // Apilar horizontalmente si hay múltiples eventos
                     if (existingBlocks.length > 0) {
