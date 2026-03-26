@@ -918,6 +918,26 @@ const labInfo = {
         observaciones: "Notebook",
         horarios: "Sin horarios asignados"
     }
+    /* Para eventos apilados */
+.event-block {
+    position: absolute;
+    color: #FFFFFF;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: center;
+    word-break: break-word;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    z-index: 5;
+    border: 1px solid rgba(255,255,255,0.3);
+    overflow-y: auto;
+    transition: all 0.2s;
+    pointer-events: auto;
+}
 };
 
 // Elementos DOM
@@ -1617,6 +1637,7 @@ cancelSelection.addEventListener("click", () => {
 });
 
 // --- RENDERIZADO DE VISTAS ---
+// --- RENDERIZADO DE VISTAS ---
 function renderDayView() {
     document.querySelectorAll("#calendarTable td").forEach(td => {
         td.innerHTML = '';
@@ -1629,7 +1650,15 @@ function renderDayView() {
         labs.forEach(lab => {
             if (!events[dateKey][lab]) return;
             
-            Object.values(events[dateKey][lab]).forEach(event => {
+            // Recolectar y ordenar eventos por hora de inicio para apilarlos correctamente
+            const labEvents = Object.values(events[dateKey][lab]);
+            labEvents.sort((a, b) => {
+                const aStart = a.startHour * 60 + (a.startMinute || 0);
+                const bStart = b.startHour * 60 + (b.startMinute || 0);
+                return aStart - bStart;
+            });
+            
+            labEvents.forEach(event => {
                 const startHour = event.startHour;
                 const startMinute = event.startMinute || 0;
                 
@@ -1640,11 +1669,36 @@ function renderDayView() {
                     const endMinutes = event.endHour * 60 + (event.endMinute || 0);
                     const durationSlots = Math.ceil((endMinutes - startMinutes) / 30);
                     
+                    // Calcular cuántos eventos ya hay en esta celda
+                    const existingBlocks = startCell.querySelectorAll('.event-block');
+                    const blockIndex = existingBlocks.length;
+                    
                     const block = document.createElement("div");
                     block.className = "event-block";
                     block.style.backgroundColor = event.color || colors[labs.indexOf(lab)];
                     block.style.height = `calc(${durationSlots * 100}% - 4px)`;
                     block.style.top = '2px';
+                    
+                    // Apilar horizontalmente si hay múltiples eventos
+                    if (existingBlocks.length > 0) {
+                        const totalBlocks = existingBlocks.length + 1;
+                        const blockWidth = 100 / totalBlocks;
+                        block.style.width = `calc(${blockWidth}% - 4px)`;
+                        block.style.left = `${blockIndex * blockWidth}%`;
+                        block.style.right = 'auto';
+                        
+                        // Reajustar eventos existentes
+                        existingBlocks.forEach((existingBlock, idx) => {
+                            existingBlock.style.width = `calc(${blockWidth}% - 4px)`;
+                            existingBlock.style.left = `${idx * blockWidth}%`;
+                            existingBlock.style.right = 'auto';
+                        });
+                    } else {
+                        block.style.width = `calc(100% - 4px)`;
+                        block.style.left = '2px';
+                        block.style.right = '2px';
+                    }
+                    
                     block.dataset.eventId = event.id;
                     block.dataset.lab = lab;
                     block.dataset.dateKey = dateKey;
@@ -1696,7 +1750,7 @@ function renderDayView() {
             });
         });
     }
-    
+
     initializeDragAndDrop();
     
     // Bloquear fin de semana con cartel gigante
