@@ -650,6 +650,27 @@ body {
 .fc .fc-toolbar-title {
     font-size: 1.2rem !important;
 }
+    .weekend-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,0,0,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: bold;
+    color: #ff0000;
+    text-transform: uppercase;
+    z-index: 20;
+    pointer-events: none;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    backdrop-filter: blur(1px);
+    font-family: 'Arial Black', sans-serif;
+    letter-spacing: 4px;
+}
 </style>
 </head>
 <body>
@@ -1139,6 +1160,36 @@ function getCurrentDateKey() {
     return currentDate.toISOString().split("T")[0];
 }
 
+// AGREGAR ESTAS TRES FUNCIONES A PARTIR DE ACÁ ↓↓↓
+
+function isWeekend(date) {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+}
+
+function getWeekendText(date) {
+    return date.getDay() === 0 ? "DOMINGO" : "SÁBADO";
+}
+
+function hasOverlap(dateKey, lab, newStartHour, newStartMinute, newEndHour, newEndMinute, excludeEventId = null) {
+    if (!events[dateKey] || !events[dateKey][lab]) return false;
+    
+    const newStartMinutes = newStartHour * 60 + newStartMinute;
+    const newEndMinutes = newEndHour * 60 + newEndMinute;
+    
+    for (let evId in events[dateKey][lab]) {
+        if (excludeEventId === evId) continue;
+        const ev = events[dateKey][lab][evId];
+        const evStart = ev.startHour * 60 + (ev.startMinute || 0);
+        const evEnd = ev.endHour * 60 + (ev.endMinute || 0);
+        
+        if (newStartMinutes < evEnd && newEndMinutes > evStart) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function generateEventId() {
     return 'evt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
@@ -1162,6 +1213,22 @@ function createSingleEvent(lab, hour, half) {
             endHour += 1;
             endMinute -= 60;
         }
+        
+        // ↓↓↓ AGREGAR ESTAS VALIDACIONES ACÁ ↓↓↓
+        
+        // Validar fin de semana
+        if (isWeekend(currentDate)) {
+            alert(`No se pueden crear reservas los fines de semana (${getWeekendText(currentDate)}).`);
+            return;
+        }
+        
+        // Validar superposición
+        if (hasOverlap(dateKey, lab, parseInt(hour), parseInt(half), endHour, endMinute)) {
+            alert("❌ ERROR: Este horario ya está ocupado en este laboratorio.");
+            return;
+        }
+        
+        // ↑↑↑ HASTA ACÍ ↑↑↑
         
         events[dateKey][lab][eventId] = {
             id: eventId,
@@ -1204,6 +1271,24 @@ function handleMouseUp(e) {
     if (title) {
         const dateKey = getCurrentDateKey();
         const eventId = generateEventId();
+        
+        // ↓↓↓ AGREGÁ ESTAS LÍNEAS NUEVAS ACÁ ↓↓↓
+        
+        // Validar fin de semana
+        if (isWeekend(currentDate)) {
+            alert(`No se pueden crear reservas los fines de semana (${getWeekendText(currentDate)}).`);
+            cancelRangeSelection();
+            return;
+        }
+        
+        // Validar superposición
+        if (hasOverlap(dateKey, selectedLab, startHour, startMinute, endHour, endMinute)) {
+            alert("❌ ERROR: El rango seleccionado se superpone con otro evento.");
+            cancelRangeSelection();
+            return;
+        }
+        
+        // ↑↑↑ HASTA ACÁ LAS LÍNEAS NUEVAS ↑↑↑
         
         if (!events[dateKey]) events[dateKey] = {};
         if (!events[dateKey][selectedLab]) events[dateKey][selectedLab] = {};
@@ -1251,6 +1336,17 @@ function adjustEventTime(dateKey, lab, eventId, event) {
         const [endH, endM] = newEnd.split(':').map(Number);
         
         if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
+            
+            // ↓↓↓ AGREGÁ ESTAS LÍNEAS NUEVAS ACÁ ↓↓↓
+            
+            // Validar superposición con otros eventos (excluyendo este mismo)
+            if (hasOverlap(dateKey, lab, startH, startM || 0, endH, endM || 0, eventId)) {
+                alert("❌ ERROR: El nuevo horario se superpone con otro evento en este laboratorio.");
+                return; // Salir sin guardar los cambios
+            }
+            
+            // ↑↑↑ HASTA ACÁ LAS LÍNEAS NUEVAS ↑↑↑
+            
             events[dateKey][lab][eventId].startHour = startH;
             events[dateKey][lab][eventId].startMinute = startM || 0;
             events[dateKey][lab][eventId].endHour = endH;
@@ -1305,6 +1401,23 @@ function moveEvent(eventDiv, targetCell) {
         const newEndHour = Math.floor(newEndMinutes / 60);
         const newEndMinute = newEndMinutes % 60;
         
+        // ↓↓↓ AGREGÁ ESTAS LÍNEAS NUEVAS ACÁ ↓↓↓
+        
+        // Validar que la fecha no sea fin de semana
+        const targetDate = new Date(dateKey + 'T12:00:00');
+        if (isWeekend(targetDate)) {
+            alert("❌ No se pueden mover eventos a fines de semana.");
+            return;
+        }
+        
+        // Validar superposición en el destino
+        if (hasOverlap(dateKey, newLab, newHour, newHalf, newEndHour, newEndMinute, eventId)) {
+            alert("❌ No se puede mover: el destino tiene un evento superpuesto.");
+            return;
+        }
+        
+        // ↑↑↑ HASTA ACÁ LAS LÍNEAS NUEVAS ↑↑↑
+        
         if (!events[dateKey][newLab]) events[dateKey][newLab] = {};
         
         events[dateKey][newLab][eventId] = {
@@ -1345,7 +1458,7 @@ btnLimpiar.addEventListener("click", () => {
         if (monthCalendar) monthCalendar.refetchEvents();
     }
 });
-
+    
 // --- CONSTRUIR TABLA ---
 function buildTable() {
     const thead = document.querySelector("#calendarTable thead tr");
@@ -1580,6 +1693,26 @@ function renderDayView() {
                 
                 startCell.appendChild(block);
             }
+        });
+    });
+    
+    initializeDragAndDrop();
+    
+    // Bloquear fin de semana con cartel gigante
+    const container = document.getElementById("calendarContainer");
+    const oldOverlay = container.querySelector(".weekend-overlay");
+    
+    if (isWeekend(currentDate)) {
+        if (oldOverlay) oldOverlay.remove();
+        const overlay = document.createElement("div");
+        overlay.className = "weekend-overlay";
+        overlay.innerText = getWeekendText(currentDate);
+        container.style.position = "relative";
+        container.appendChild(overlay);
+    } else {
+        if (oldOverlay) oldOverlay.remove();
+    }
+}
         });
     });
     
