@@ -264,6 +264,7 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
+    gap: 2px;                     /* separación uniforme entre título y hora */
     text-align: center;
     word-break: break-word;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
@@ -283,12 +284,12 @@ body {
     text-overflow: clip;
     max-width: 100%;
     word-break: break-word;
-    line-height: 1.3;           /* un poco más de espacio entre líneas */
-    max-height: 2.6em;          /* ajustado al nuevo line-height */
+    line-height: 1.3;
+    max-height: 2.6em;            /* suficiente para dos líneas */
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
-    margin-bottom: 3px;         /* separación del título con la hora */
+    margin: 0;                    /* eliminamos margen individual */
 }
 
 .event-block .event-time {
@@ -296,11 +297,11 @@ body {
     background: rgba(0,0,0,0.3);
     padding: 1px 3px;
     border-radius: 3px;
-    margin-top: 2px;            /* separación superior */
     white-space: normal;
     overflow: visible;
     text-overflow: clip;
     word-break: break-word;
+    margin: 0;                    /* eliminamos margen individual */
 }
 .event-block .edit-controls {
     position: absolute;
