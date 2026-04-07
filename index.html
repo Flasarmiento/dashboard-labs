@@ -8,19 +8,12 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/locales/es.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.11/dist/interact.min.js"></script>
-
-<!-- AGREGAR FIREBASE (CDN) -->
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <style>
-/* Todos tus estilos originales se mantienen IGUAL */
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
-
+/* === RESET Y BASE === */
+* { box-sizing: border-box; margin: 0; padding: 0; }
 body {
     font-family: 'Segoe UI', Arial, sans-serif;
     background: #f5f7fa;
@@ -30,672 +23,428 @@ body {
     overflow: hidden;
 }
 
+/* === LOGIN MODAL === */
+#loginModal {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(135deg, #153244 0%, #1e4057 60%, #0d2233 100%);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 99999;
+}
+#loginBox {
+    background: white; border-radius: 20px; padding: 2.5rem 2rem;
+    width: 90%; max-width: 420px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    text-align: center;
+}
+#loginBox .login-logo {
+    font-size: 3rem; margin-bottom: 0.5rem;
+}
+#loginBox h2 {
+    color: #153244; font-size: 1.4rem; margin-bottom: 0.3rem;
+}
+#loginBox p.subtitle {
+    color: #888; font-size: 0.85rem; margin-bottom: 1.5rem;
+}
+#loginBox input {
+    width: 100%; padding: 12px 15px; margin: 6px 0;
+    border: 2px solid #e0e0e0; border-radius: 10px;
+    font-size: 0.95rem; transition: border-color 0.2s;
+    outline: none;
+}
+#loginBox input:focus { border-color: #153244; }
+#loginBtn {
+    width: 100%; padding: 12px; margin-top: 12px;
+    background: #153244; color: white; border: none;
+    border-radius: 10px; font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: background 0.2s;
+}
+#loginBtn:hover { background: #1e4057; }
+.login-links { margin-top: 12px; display: flex; justify-content: space-between; }
+.login-links button {
+    background: none; border: none; color: #153244;
+    font-size: 0.82rem; cursor: pointer; text-decoration: underline;
+    padding: 4px;
+}
+.login-links button:hover { color: #FFCC00; }
+#loginError {
+    color: #e74c3c; font-size: 0.85rem;
+    margin-top: 10px; min-height: 20px;
+    background: #fdecea; border-radius: 6px;
+    padding: 6px 10px; display: none;
+}
+#loginError.visible { display: block; }
+.login-register-section {
+    margin-top: 16px; border-top: 1px solid #eee;
+    padding-top: 14px;
+}
+.login-register-section p { font-size: 0.82rem; color: #999; margin-bottom: 8px; }
+#registerBtn {
+    background: #f0f4f8; color: #153244; border: 1px solid #ddd;
+    padding: 9px; border-radius: 8px; font-size: 0.88rem;
+    cursor: pointer; width: 100%; transition: background 0.2s;
+}
+#registerBtn:hover { background: #e0e9f0; }
+
+/* === ADMIN MODAL === */
+#adminModal {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: none;
+    align-items: center; justify-content: center;
+    z-index: 20001; backdrop-filter: blur(3px);
+}
+#adminModal.visible { display: flex; }
+#adminModalContent {
+    background: white; padding: 1.5rem; border-radius: 16px;
+    width: 90%; max-width: 800px; max-height: 85vh;
+    overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+#adminModalContent h3 {
+    color: #153244; font-size: 1.3rem; margin-bottom: 1rem;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.admin-table {
+    width: 100%; border-collapse: collapse; font-size: 0.9rem;
+}
+.admin-table th {
+    background: #153244; color: #FFCC00;
+    padding: 10px 8px; text-align: left;
+}
+.admin-table td {
+    border-bottom: 1px solid #eee; padding: 9px 8px;
+}
+.admin-table tr:hover td { background: #f9f9f9; }
+.admin-table select {
+    padding: 4px 8px; border-radius: 6px; border: 1px solid #ccc;
+}
+.admin-table button {
+    padding: 4px 10px; border: none; border-radius: 6px;
+    background: #153244; color: white; cursor: pointer; font-size: 0.8rem;
+}
+.admin-table button:hover { background: #1e4057; }
+
+/* === SIDEBAR === */
 #sidebar {
     width: 220px;
     background: linear-gradient(180deg, #153244 0%, #1e4057 100%);
-    color: #FFFFFF;
-    overflow-y: auto;
-    padding: 20px 12px;
-    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-    z-index: 20;
+    color: #FFFFFF; overflow-y: auto;
+    padding: 16px 12px;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.15);
+    z-index: 20; display: none;
+    flex-direction: column;
 }
-
+#userInfoBar {
+    background: rgba(255,255,255,0.1); border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 12px; font-size: 0.78rem;
+    border-left: 3px solid #FFCC00;
+}
+#userInfoBar .user-email { color: #ccc; word-break: break-all; }
+#userInfoBar .user-role {
+    font-weight: bold; color: #FFCC00; font-size: 0.75rem; margin-top: 2px;
+}
 #sidebar h2 {
-    font-size: 1.2rem;
-    text-align: center;
-    margin-bottom: 1.5rem;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #FFCC00;
-    letter-spacing: 1px;
+    font-size: 1.1rem; text-align: center; margin-bottom: 1rem;
+    padding-bottom: 10px; border-bottom: 2px solid #FFCC00; letter-spacing: 1px;
 }
-
 .lab {
-    padding: 12px 8px;
-    margin: 6px 0;
-    background: rgba(255,255,255,0.1);
-    border-radius: 8px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.3s ease;
-    font-weight: 500;
-    font-size: 0.95rem;
-    border: 1px solid transparent;
-    word-break: break-word;
+    padding: 10px 8px; margin: 5px 0;
+    background: rgba(255,255,255,0.1); border-radius: 8px;
+    cursor: pointer; text-align: center; transition: all 0.3s ease;
+    font-weight: 500; font-size: 0.9rem;
+    border: 1px solid transparent; word-break: break-word;
 }
-
 .lab:hover {
-    background: #8DE2D6;
-    color: #153244;
-    transform: translateX(5px);
-    border-color: #FFCC00;
+    background: #8DE2D6; color: #153244;
+    transform: translateX(4px); border-color: #FFCC00;
 }
 
+/* === MAIN === */
 #main {
-    flex: 1;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    flex: 1; padding: 16px; display: none;
+    flex-direction: column; overflow: hidden; min-height: 0;
 }
 
+/* === TOOLBAR === */
 #toolbar {
-    margin-bottom: 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    background: white;
-    padding: 15px;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 10px; display: flex;
+    justify-content: space-between; align-items: center;
+    gap: 8px; flex-wrap: wrap; background: white;
+    padding: 12px 15px; border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1); flex-shrink: 0;
 }
-
 #dateNavigator {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    background: #f8f9fa;
-    padding: 5px 15px;
-    border-radius: 40px;
+    display: flex; align-items: center; gap: 10px;
+    background: #f8f9fa; padding: 4px 14px; border-radius: 40px;
 }
-
 #dateNavigator button {
-    background: #153244;
-    color: white;
-    border: none;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: #153244; color: white; border: none;
+    width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
     transition: all 0.2s;
 }
-
-#dateNavigator button:hover {
-    background: #FFCC00;
-    color: #153244;
-    transform: scale(1.1);
-}
-
+#dateNavigator button:hover { background: #FFCC00; color: #153244; transform: scale(1.1); }
 #currentDateDisplay {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #153244;
-    min-width: 200px;
-    text-align: center;
+    font-size: 1rem; font-weight: 600; color: #153244;
+    min-width: 190px; text-align: center;
 }
-
 #datePicker {
-    padding: 8px 12px;
-    border: 2px solid #153244;
-    border-radius: 40px;
-    font-size: 0.9rem;
-    cursor: pointer;
-    background: white;
+    padding: 7px 12px; border: 2px solid #153244;
+    border-radius: 40px; font-size: 0.88rem; cursor: pointer; background: white;
 }
-
-#viewSelector {
-    display: flex;
-    gap: 8px;
-}
-
+#viewSelector { display: flex; gap: 6px; }
 .btn {
-    background: #153244;
-    color: #FFFFFF;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 40px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: all 0.2s;
-    font-weight: 500;
+    background: #153244; color: #FFFFFF; border: none;
+    padding: 7px 14px; border-radius: 40px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s; font-weight: 500;
+}
+.btn:hover { background: #8DE2D6; color: #153244; transform: translateY(-1px); }
+.btn.active { background: #FFCC00; color: #153244; }
+#btnHoy { background: #3C3C3B; }
+#rangeModeBtn { background: #4CAF50; }
+#rangeModeBtn.active { background: #ff9800; }
+#btnHorarios { background: #9B59B6; }
+#btnHorarios:hover { background: #8E44AD; }
+#btnAdminUsers { background: #E67E22; }
+#btnAdminUsers:hover { background: #D35400; }
+#btnLogout { background: #7f8c8d; }
+#btnLogout:hover { background: #636e72; }
+#btnLimpiar { background: #e74c3c; }
+#btnLimpiar:hover { background: #c0392b; }
+
+/* === SELECCIÓN INFO === */
+#selectionInfo {
+    background: #153244; color: white; padding: 7px 14px;
+    border-radius: 40px; font-size: 0.88rem;
+    display: none; align-items: center; gap: 10px;
+    margin-bottom: 8px; flex-shrink: 0;
+}
+#selectionInfo.active { display: flex; }
+#cancelSelection {
+    background: #ff4444; border: none; color: white;
+    border-radius: 50%; width: 22px; height: 22px;
+    cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
 }
 
-.btn:hover {
-    background: #8DE2D6;
-    color: #153244;
-    transform: translateY(-2px);
+/* === CONTAINERS === */
+#dayViewContainer {
+    flex: 1; overflow: hidden; display: flex;
+    flex-direction: column; min-height: 0;
 }
-
-.btn.active {
-    background: #FFCC00;
-    color: #153244;
+#weekViewContainer {
+    flex: 1; overflow: hidden; display: none; min-height: 0;
 }
-
-#btnHoy {
-    background: #3C3C3B;
-}
-
-#rangeModeBtn {
-    background: #4CAF50;
-}
-
-#rangeModeBtn.active {
-    background: #ff9800;
-}
-
-#btnHorarios {
-    background: #9B59B6;
-}
-
-#btnHorarios:hover {
-    background: #8E44AD;
-}
-
+#weekCalendar { height: 100%; }
 #calendarContainer {
-    flex: 1;
-    overflow: auto;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    padding: 10px;
-    max-height: calc(100vh - 180px);
-    position: relative;
+    flex: 1; overflow: auto; background: white;
+    border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 8px; position: relative;
 }
 
+/* === TABLA CALENDARIO === */
 #calendarTable {
-    border-collapse: collapse;
-    width: 100%;
-    min-width: 1200px;
-    table-layout: fixed;
+    border-collapse: collapse; width: 100%;
+    min-width: 1200px; table-layout: fixed;
 }
-
 #calendarTable th, #calendarTable td {
-    border: 1px solid #e0e0e0;
-    text-align: center;
-    height: 30px;
-    position: relative;
+    border: 1px solid #e0e0e0; text-align: center;
+    height: 30px; position: relative;
 }
-
 #calendarTable th {
-    background: #FFCC00;
-    color: #153244;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    font-weight: 600;
-    padding: 8px 5px;
-    font-size: 0.85rem;
-    height: 40px;
-    cursor: pointer;
+    background: #FFCC00; color: #153244; position: sticky; top: 0; z-index: 10;
+    font-weight: 600; padding: 8px 4px; font-size: 0.82rem;
+    height: 38px; cursor: pointer;
 }
-
 #calendarTable th:first-child {
-    background: #153244;
-    color: #FFCC00;
-    width: 80px;
-    position: sticky;
-    left: 0;
-    z-index: 20;   /* ← aumentado para que quede sobre los eventos */
-    cursor: default;
+    background: #153244; color: #FFCC00; width: 78px;
+    position: sticky; left: 0; z-index: 20; cursor: default;
 }
-
 #calendarTable td {
-    background: white;
-    transition: background 0.2s;
-    cursor: pointer;
+    background: white; transition: background 0.15s; cursor: pointer;
+}
+#calendarTable td:hover { background: #f0f8ff; }
+#calendarTable td.selected { background: #e3f2fd; border: 2px solid #2196F3; }
+#calendarTable td.selecting { background: #bbdefb; }
+.time-slot {
+    font-weight: bold; background: #f8f9fa !important;
+    position: sticky; left: 0; z-index: 12; font-size: 0.78rem;
 }
 
-#calendarTable td:hover {
-    background: #f0f8ff;
-}
-
-#calendarTable td.selected {
-    background: #e3f2fd;
-    border: 2px solid #2196F3;
-}
-
-#calendarTable td.selecting {
-    background: #bbdefb;
-}
-
-/* Estilo para eventos apilados horizontalmente */
+/* === BLOQUES DE EVENTOS === */
 .event-block {
-    position: absolute;
-    color: #FFFFFF;
-    padding: 2px 4px;
-    border-radius: 4px;
-    font-size: 0.7rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    text-align: center;
-    word-break: break-word;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    z-index: 5;
-    border: 1px solid rgba(255,255,255,0.3);
-    overflow-x: hidden;
-    overflow-y: auto;
-    transition: all 0.2s;
-    pointer-events: auto;
+    position: absolute; color: #FFFFFF; padding: 2px 4px;
+    border-radius: 4px; font-size: 0.68rem;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-start;
+    text-align: center; word-break: break-word;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25); z-index: 5;
+    border: 1px solid rgba(255,255,255,0.35);
+    overflow: hidden; transition: opacity 0.15s; pointer-events: auto;
 }
-
 .event-block .event-title {
-    font-weight: bold;
-    font-size: 0.7rem;
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    max-width: 100%;
-    word-break: break-word;
-    line-height: 1.3;
-    max-height: 2.6em;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    flex: 1;                     /* ocupa el espacio disponible */
-    margin-bottom: 2px;
+    font-weight: bold; font-size: 0.68rem;
+    white-space: normal; max-width: 100%; word-break: break-word;
+    line-height: 1.3; max-height: 2.6em;
+    display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden;
+    flex: 1; margin-bottom: 2px;
 }
-
 .event-block .event-time {
-    font-size: 0.6rem;
-    background: rgba(0,0,0,0.3);
-    padding: 1px 3px;
-    border-radius: 3px;
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    word-break: break-word;
-    margin-top: auto;            /* empuja la hora hacia abajo */
-    margin-bottom: 0;
+    font-size: 0.58rem; background: rgba(0,0,0,0.3);
+    padding: 1px 3px; border-radius: 3px;
+    white-space: nowrap; margin-top: auto;
 }
 .event-block .edit-controls {
-    position: absolute;
-    top: 1px;
-    right: 1px;
-    display: none;
-    gap: 1px;
-    z-index: 15;
+    position: absolute; top: 1px; right: 1px;
+    display: none; gap: 1px; z-index: 15;
 }
-
-.event-block:hover .edit-controls {
-    display: flex;
-}
-
+.event-block:hover .edit-controls { display: flex; }
 .edit-btn, .delete-btn, .time-btn {
-    background: rgba(0,0,0,0.5);
-    border: none;
-    color: white;
-    width: 16px;
-    height: 16px;
-    border-radius: 2px;
-    font-size: 10px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: rgba(0,0,0,0.5); border: none; color: white;
+    width: 15px; height: 15px; border-radius: 2px; font-size: 9px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
     backdrop-filter: blur(2px);
 }
+.edit-btn:hover, .delete-btn:hover, .time-btn:hover { background: rgba(0,0,0,0.75); }
 
-.edit-btn:hover, .delete-btn:hover, .time-btn:hover {
-    background: rgba(0,0,0,0.7);
+/* === MODAL GENÉRICO === */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: none;
+    align-items: center; justify-content: center;
+    z-index: 9999; backdrop-filter: blur(3px);
 }
-
-#modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.7);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-    backdrop-filter: blur(3px);
+.modal-overlay.visible { display: flex; }
+.modal-box {
+    background: white; border-radius: 16px; padding: 1.5rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column;
 }
-
-#modalContent {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 16px;
-    width: 90%;
-    max-width: 1200px;
-    height: 85%;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+.modal-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;
 }
-
-#modalHeader {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
+.modal-header h3 { color: #153244; font-size: 1.25rem; margin: 0; }
+.modal-close-btn {
+    background: #153244; color: white; border: none;
+    width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+    font-size: 0.95rem; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s; flex-shrink: 0;
 }
+.modal-close-btn:hover { background: #FFCC00; color: #153244; }
 
-#modalTitle {
-    color: #153244;
-    font-size: 1.3rem;
-    margin: 0;
-}
-
-#closeModal {
-    background: #153244;
-    color: white;
-    border: none;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-
-#closeModal:hover {
-    background: #FFCC00;
-    color: #153244;
-}
-
-#monthCalendar {
-    flex: 1;
-    min-height: 0;
-}
-
+/* === MODAL MENSUAL (lab) === */
+#modal { z-index: 10000; }
+#modalContent { width: 90%; max-width: 1200px; height: 85vh; }
+#monthCalendar { flex: 1; min-height: 0; }
 .fc-event {
-    cursor: pointer;
-    font-size: 0.8rem !important;
-    border-radius: 4px !important;
-    padding: 2px 4px !important;
+    cursor: pointer; font-size: 0.78rem !important;
+    border-radius: 4px !important; padding: 2px 4px !important;
 }
 
-#selectionInfo {
-    background: #153244;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 40px;
-    font-size: 0.9rem;
-    display: none;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-}
-
-#selectionInfo.active {
-    display: flex;
-}
-
-#cancelSelection {
-    background: #ff4444;
-    border: none;
-    color: white;
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
-    cursor: pointer;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-#weekViewContainer {
-    display: none;
-    height: 100%;
-    overflow: auto;
-}
-
-#weekViewContainer.active {
-    display: block;
-}
-
-#dayViewContainer {
-    display: block;
-    height: 100%;
-    overflow: hidden;
-}
-
-#dayViewContainer.hidden {
-    display: none;
-}
-
-.time-slot {
-    font-weight: bold;
-    background: #f8f9fa;
-    position: sticky;
-    left: 0;
-    z-index: 12;
-    font-size: 0.8rem;
-}
-
-/* Tooltip personalizado */
-.lab-tooltip {
-    position: fixed;
-    background: #153244;
-    color: white;
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    max-width: 350px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    z-index: 10000;
-    pointer-events: none;
-    border-left: 4px solid #FFCC00;
-    display: none;
-}
-
-.lab-tooltip h4 {
-    margin: 0 0 8px 0;
-    color: #FFCC00;
-    font-size: 1rem;
-}
-
-.lab-tooltip p {
-    margin: 5px 0;
-}
-
-.lab-tooltip .tooltip-label {
-    font-weight: bold;
-    color: #8DE2D6;
-}
-
-.lab-tooltip .teacher-schedule-mini {
-    margin-top: 8px;
-    border-top: 1px solid #8DE2D6;
-    padding-top: 5px;
-    font-size: 0.8rem;
-}
-
-/* Modal de horarios de profesores */
-#horariosModal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.7);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 10001;
-    backdrop-filter: blur(3px);
-}
-
+/* === MODAL HORARIOS === */
+#horariosModal { z-index: 10001; }
 #horariosModalContent {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 16px;
-    width: 95%;
-    max-width: 1300px;
-    height: 90%;
-    overflow: auto;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    width: 95%; max-width: 1300px; height: 90vh; overflow-y: auto;
 }
-
 #horariosModalHeader {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-    position: sticky;
-    top: 0;
-    background: white;
-    padding: 10px 0;
-    z-index: 10;
+    position: sticky; top: 0; background: white; padding: 8px 0;
+    z-index: 10; border-bottom: 1px solid #eee; margin-bottom: 12px;
 }
-
-#horariosModalTitle {
-    color: #153244;
-    font-size: 1.5rem;
-    margin: 0;
-}
-
-#closeHorariosModal {
-    background: #153244;
-    color: white;
-    border: none;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 1.2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-
-#closeHorariosModal:hover {
-    background: #FFCC00;
-    color: #153244;
-}
-
-.teacher-grid {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-}
-
+.teacher-grid { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
 .teacher-grid th {
-    background: #153244;
-    color: #FFCC00;
-    padding: 10px 5px;
-    position: sticky;
-    top: 60px;
-    z-index: 5;
-    border: 1px solid #2a4a60;
+    background: #153244; color: #FFCC00;
+    padding: 9px 5px; position: sticky; top: 60px;
+    z-index: 5; border: 1px solid #2a4a60;
+}
+.teacher-grid td { border: 1px solid #ddd; padding: 7px 5px; text-align: center; }
+.teacher-grid .day-header { background: #8DE2D6; color: #153244; font-weight: bold; }
+.teacher-grid .turno { background: #f5f5f5; font-weight: 500; }
+.teacher-grid .sum-row { background: #fff3cd; }
+
+/* === TOOLTIP === */
+#labTooltip {
+    position: fixed; background: #153244; color: white;
+    padding: 12px; border-radius: 8px; font-size: 0.88rem;
+    max-width: 340px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    z-index: 20000; pointer-events: none;
+    border-left: 4px solid #FFCC00; display: none;
+}
+#labTooltip h4 { margin: 0 0 7px 0; color: #FFCC00; font-size: 0.95rem; }
+#labTooltip p { margin: 4px 0; }
+.tooltip-label { font-weight: bold; color: #8DE2D6; }
+.teacher-schedule-mini {
+    margin-top: 8px; border-top: 1px solid #8DE2D6;
+    padding-top: 5px; font-size: 0.78rem;
 }
 
-.teacher-grid td {
-    border: 1px solid #ddd;
-    padding: 8px 5px;
-    text-align: center;
-}
-
-.teacher-grid .day-header {
-    background: #8DE2D6;
-    color: #153244;
-    font-weight: bold;
-}
-
-.teacher-grid .turno {
-    background: #f5f5f5;
-    font-weight: 500;
-}
-
-.teacher-grid .sum-row {
-    background: #fff3cd;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    body {
-        flex-direction: column;
-    }
-    
-    #sidebar {
-        width: 100%;
-        height: auto;
-        max-height: 200px;
-        padding: 10px;
-    }
-    
-    .lab {
-        display: inline-block;
-        width: calc(33.33% - 8px);
-        margin: 4px;
-        padding: 8px;
-        font-size: 0.8rem;
-    }
-    
-    #toolbar {
-        flex-direction: column;
-    }
-    
-    #dateNavigator {
-        width: 100%;
-        justify-content: center;
-    }
-    
-    .teacher-grid {
-        font-size: 0.7rem;
-    }
-    
-    .teacher-grid th, .teacher-grid td {
-        padding: 5px 2px;
-    }
-}
-
-.fc .fc-toolbar-title {
-    font-size: 1.2rem !important;
-}
-
+/* === WEEKEND OVERLAY === */
 .weekend-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255,0,0,0.2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2rem;
-    font-weight: bold;
-    color: #ff0000;
-    text-transform: uppercase;
-    z-index: 20;
-    pointer-events: none;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-    backdrop-filter: blur(1px);
-    font-family: 'Arial Black', sans-serif;
-    letter-spacing: 4px;
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,0,0,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem; font-weight: bold; color: #cc0000;
+    text-transform: uppercase; z-index: 20; pointer-events: none;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.2); backdrop-filter: blur(1px);
+    font-family: 'Arial Black', sans-serif; letter-spacing: 4px;
 }
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+    body { flex-direction: column; }
+    #sidebar { width: 100%; height: auto; max-height: 180px; padding: 8px; flex-direction: row; flex-wrap: wrap; }
+    #sidebar h2 { width: 100%; margin-bottom: 6px; }
+    .lab { display: inline-block; width: calc(33.33% - 6px); margin: 3px; padding: 6px; font-size: 0.75rem; }
+    #toolbar { flex-direction: column; }
+    #dateNavigator { width: 100%; justify-content: center; }
+}
+
+/* Animaciones */
+@keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+#loginBox { animation: fadeIn 0.3s ease; }
 </style>
 </head>
 <body>
 
-<!-- Tooltip flotante -->
-<div id="labTooltip" class="lab-tooltip"></div>
-
-<!-- Modal de Horarios de Profesores -->
-<div id="horariosModal">
-  <div id="horariosModalContent">
-    <div id="horariosModalHeader">
-      <h3 id="horariosModalTitle">👨‍🏫 Horarios de Profesores por Laboratorio</h3>
-      <button id="closeHorariosModal">✕</button>
-    </div>
-    <div id="horariosGridContainer"></div>
+<!-- ===================== LOGIN MODAL ===================== -->
+<div id="loginModal">
+  <div id="loginBox">
+    <div class="login-logo">🏫</div>
+    <h2>Laboratorios – Reservas</h2>
+    <p class="subtitle">Iniciá sesión con tu cuenta de Google</p>
+    <button id="googleLoginBtn" style="background:#4285F4; color:white; border:none; padding:12px 20px; border-radius:40px; font-size:1rem; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:10px;">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:20px; height:20px;"> 
+      Acceder con Google
+    </button>
+    <div id="loginError" style="margin-top:15px;"></div>
   </div>
 </div>
 
+<!-- ===================== ADMIN MODAL ===================== -->
+<div id="adminModal" class="modal-overlay">
+  <div id="adminModalContent" class="modal-box" style="width:90%;max-width:820px;max-height:85vh;overflow-y:auto;">
+    <div class="modal-header">
+      <h3>👥 Gestión de Usuarios</h3>
+      <button class="modal-close-btn" id="closeAdminModal">✕</button>
+    </div>
+    <div id="userList"></div>
+    <p style="margin-top:12px;font-size:0.8rem;color:#888;">
+      ⚠️ Para crear un usuario nuevo, pedile que se registre desde la pantalla de login. Luego cambiá su rol acá.
+    </p>
+  </div>
+</div>
+
+<!-- ===================== SIDEBAR ===================== -->
 <div id="sidebar">
+  <div id="userInfoBar">
+    <div class="user-email" id="userEmailDisplay">—</div>
+    <div class="user-role" id="userRoleDisplay">—</div>
+  </div>
   <h2>📋 LABORATORIOS</h2>
   <div id="labList"></div>
 </div>
 
+<!-- ===================== MAIN ===================== -->
 <div id="main">
   <div id="toolbar">
-    <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
       <div id="dateNavigator">
         <button id="prevDay">←</button>
         <span id="currentDateDisplay"></span>
@@ -704,384 +453,65 @@ body {
       <input type="date" id="datePicker">
       <button class="btn" id="btnHoy">📅 Hoy</button>
     </div>
-    
-    <div style="display: flex; gap: 10px;">
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
       <div id="viewSelector">
         <button class="btn active" data-view="diario">Vista Diaria</button>
         <button class="btn" data-view="semanal">Vista Semanal</button>
       </div>
       <button class="btn" id="rangeModeBtn">📏 Modo Rango</button>
-      <button class="btn" id="btnHorarios">👨‍🏫 Horarios Profes</button>
+      <button class="btn" id="btnHorarios">👨‍🏫 Horarios</button>
       <button class="btn" id="btnLimpiar">🧹 Limpiar día</button>
+      <button class="btn" id="btnAdminUsers" style="display:none;">👥 Usuarios</button>
+      <button class="btn" id="btnLogout">🚪 Salir</button>
     </div>
   </div>
-  
+
   <div id="selectionInfo">
-    <span>Selecciona la hora de inicio y arrastra hasta la hora de fin</span>
+    <span>🖱️ Arrastrá para seleccionar el rango horario</span>
     <button id="cancelSelection">✕</button>
   </div>
-  
+
   <div id="dayViewContainer">
     <div id="calendarContainer">
       <table id="calendarTable">
-        <thead>
-          <tr>
-            <th>Hora</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Hora</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
   </div>
-  
+
   <div id="weekViewContainer">
     <div id="weekCalendar"></div>
   </div>
 </div>
 
-<!-- Modal Mensual -->
-<div id="modal">
-  <div id="modalContent">
-    <div id="modalHeader">
+<!-- ===================== MODAL MENSUAL (por Lab) ===================== -->
+<div id="modal" class="modal-overlay">
+  <div id="modalContent" class="modal-box">
+    <div class="modal-header">
       <h3 id="modalTitle">Calendario Mensual</h3>
-      <button id="closeModal">✕</button>
+      <button class="modal-close-btn" id="closeModal">✕</button>
     </div>
-    <div id="monthCalendar"></div>
+    <div id="monthCalendar" style="flex:1;min-height:0;"></div>
   </div>
 </div>
 
+<!-- ===================== MODAL HORARIOS PROFESORES ===================== -->
+<div id="horariosModal" class="modal-overlay">
+  <div id="horariosModalContent" class="modal-box">
+    <div id="horariosModalHeader" class="modal-header">
+      <h3 id="horariosModalTitle">👨‍🏫 Horarios de Profesores por Laboratorio</h3>
+      <button class="modal-close-btn" id="closeHorariosModal">✕</button>
+    </div>
+    <div id="horariosGridContainer" style="overflow-x:auto;"></div>
+  </div>
+</div>
+
+<!-- ===================== TOOLTIP ===================== -->
+<div id="labTooltip"></div>
+
 <script>
-// Configuración inicial
-const labs = ["SUM", "HYS", "TEXTIL", "RA", "ROBÓTICA", "IA", "FINANZAS", "TRANSPORTE", "LOGÍSTICA", "HYS 2", "STREAMING", "ENERGÍA", "SUSTENTABILIDAD", "DIGITAL"];
-const colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEEAD", "#D4A5A5", "#9B59B6", "#3498DB", "#E67E22", "#2ECC71", "#E74C3C", "#1ABC9C", "#F1C40F", "#34495E"];
-const hours = Array.from({length: 14}, (_, i) => 8 + i); // 8:00 a 21:00
-let events = {};
-let currentView = 'diario';
-let currentDate = new Date();
-let weekCalendar = null;
-let monthCalendar = null;
-
-// Variables para selección de rango
-let rangeModeActive = false;
-let selectionStart = { hour: null, half: null };
-let selectionEnd = { hour: null, half: null };
-let selectedLab = null;
-
-// Variable para drag & drop
-let draggedEvent = null;
-
-// --- GRILLA COMPLETA DE HORARIOS DE PROFESORES ---
-const teacherSchedule = {
-    "Lunes": {
-        "Mañana (9–13)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "Viera", "IA": "vacante", "LOGÍSTICA": "De la Barrera", "ENERGÍA": "vacante", "FINANZAS": "Abasto", "RA/3D": "Morgani/villagra", "ROBÓTICA": "del Castillo" },
-        "Tarde (14-17)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "Viera/García", "IA": "Cacchione", "LOGÍSTICA": "Liliana", "ENERGÍA": "Salvo", "FINANZAS": "Blanc", "RA/3D": "Morgani", "ROBÓTICA": "" },
-        "Noche (18–21)": { "SUSTENTABILIDAD": "vacante", "HYS": "García", "IA": "Lopez", "LOGÍSTICA": "vacante", "ENERGÍA": "Salvo", "FINANZAS": "Blanc", "RA/3D": "vacante", "ROBÓTICA": "González" },
-        "SUM (17 a 21)": { "SUM": "" }
-    },
-    "Martes": {
-        "Mañana (9–13)": { "SUSTENTABILIDAD": "Haupt/Ramirez", "HYS": "vacante", "IA": "vacante", "LOGÍSTICA": "De la Barrera", "ENERGÍA": "González", "FINANZAS": "Abasto", "RA/3D": "Morgani/villagra", "ROBÓTICA": "Forni" },
-        "Tarde (14-17)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "vacante", "IA": "Cacchione", "LOGÍSTICA": "vacante", "ENERGÍA": "vacante", "FINANZAS": "Blanc", "RA/3D": "Morgani", "ROBÓTICA": "Mosquera" },
-        "Noche (18–21)": { "SUSTENTABILIDAD": "vacante", "HYS": "vacante", "IA": "López", "LOGÍSTICA": "vacante", "ENERGÍA": "vacante", "FINANZAS": "", "RA/3D": "vacante", "ROBÓTICA": "" },
-        "SUM (17 a 21)": { "SUM": "" }
-    },
-    "Miércoles": {
-        "Mañana (9–13)": { "SUSTENTABILIDAD": "Ramirez/Haupt", "HYS": "Viera", "IA": "Cacchione", "LOGÍSTICA": "De la Barrera", "ENERGÍA": "vacante", "FINANZAS": "Abasto", "RA/3D": "Villagra", "ROBÓTICA": "del Castillo" },
-        "Tarde (14-17)": { "SUSTENTABILIDAD": "Haupt", "HYS": "Viera/García", "IA": "vacante", "LOGÍSTICA": "Liliana", "ENERGÍA": "Salvo", "FINANZAS": "", "RA/3D": "Morgani", "ROBÓTICA": "Mosquera" },
-        "Noche (18–21)": { "SUSTENTABILIDAD": "Haupt", "HYS": "García", "IA": "Lopez", "LOGÍSTICA": "vacante", "ENERGÍA": "Salvo", "FINANZAS": "Blanc", "RA/3D": "vacante", "ROBÓTICA": "González" },
-        "SUM (17 a 21)": { "SUM": "" }
-    },
-    "Jueves": {
-        "Mañana (9–13)": { "SUSTENTABILIDAD": "Haupt/Ramirez", "HYS": "vacante", "IA": "vacante", "LOGÍSTICA": "De la Barrera", "ENERGÍA": "Gonzalez", "FINANZAS": "Abasto", "RA/3D": "Morgani/villagra", "ROBÓTICA": "Forni" },
-        "Tarde (14-17)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "vacante", "IA": "Cacchione", "LOGÍSTICA": "Liliana", "ENERGÍA": "vacante", "FINANZAS": "", "RA/3D": "Morgani", "ROBÓTICA": "" },
-        "Noche (18–21)": { "SUSTENTABILIDAD": "vacante", "HYS": "vacante", "IA": "Lopez", "LOGÍSTICA": "vacante", "ENERGÍA": "vacante", "FINANZAS": "Blanc", "RA/3D": "vacante", "ROBÓTICA": "Mosquera" },
-        "SUM (17 a 21)": { "SUM": "" }
-    },
-    "Viernes": {
-        "Mañana (9–13)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "Viera", "IA": "vacante", "LOGÍSTICA": "De la Barrera", "ENERGÍA": "vacante", "FINANZAS": "Abasto", "RA/3D": "Morgani/villagra", "ROBÓTICA": "del Castillo" },
-        "Tarde (14-17)": { "SUSTENTABILIDAD": "Ramirez", "HYS": "Viera/García", "IA": "Cacchione", "LOGÍSTICA": "", "ENERGÍA": "Salvo", "FINANZAS": "", "RA/3D": "Morgani", "ROBÓTICA": "" },
-        "Noche (18–21)": { "SUSTENTABILIDAD": "vacante", "HYS": "García", "IA": "Lopez", "LOGÍSTICA": "vacante", "ENERGÍA": "Salvo", "FINANZAS": "Blanc", "RA/3D": "vacante", "ROBÓTICA": "González" },
-        "SUM (17 a 21)": { "SUM": "" }
-    }
-};
-
-// Mapeo de nombres de laboratorios en la grilla a los nombres en el sistema
-const labNameMapping = {
-    "SUSTENTABILIDAD": "SUSTENTABILIDAD",
-    "HYS": "HYS",
-    "IA": "IA",
-    "LOGÍSTICA": "LOGÍSTICA",
-    "ENERGÍA": "ENERGÍA",
-    "FINANZAS": "FINANZAS",
-    "RA/3D": "RA",
-    "ROBÓTICA": "ROBÓTICA",
-    "SUM": "SUM"
-};
-
-// --- INFORMACIÓN DE LABORATORIOS (mejorada con horarios) ---
-const labInfo = {
-    "SUM": {
-        piso: "4",
-        descripcion: "SUM",
-        capacidad: "80-100",
-        observaciones: "Configurable",
-        horarios: "Sin horarios asignados"
-    },
-    "HYS": {
-        piso: "3",
-        descripcion: "HYS",
-        capacidad: "5",
-        observaciones: "Simuladores",
-        horarios: "Lun/Vie: Viera/García, Mié: Viera"
-    },
-    "TEXTIL": {
-        piso: "3",
-        descripcion: "TEXTIL",
-        capacidad: "8",
-        observaciones: "Notebook",
-        horarios: "Sin horarios asignados"
-    },
-    "RA": {
-        piso: "3",
-        descripcion: "RA",
-        capacidad: "12",
-        observaciones: "zSpace",
-        horarios: "Morgani/villagra (Mañ), Morgani (Tarde)"
-    },
-    "ROBÓTICA": {
-        piso: "3",
-        descripcion: "ROBÓTICA",
-        capacidad: "14",
-        observaciones: "Notebook",
-        horarios: "del Castillo, Forni, Mosquera, González"
-    },
-    "IA": {
-        piso: "3",
-        descripcion: "IA",
-        capacidad: "5",
-        observaciones: "Computadoras gamer",
-        horarios: "Cacchione, Lopez"
-    },
-    "FINANZAS": {
-        piso: "3",
-        descripcion: "FINANZAS",
-        capacidad: "16",
-        observaciones: "Notebook/monitor",
-        horarios: "Abasto (Mañ), Blanc (Tarde/Noche)"
-    },
-    "TRANSPORTE": {
-        piso: "2",
-        descripcion: "CONSTRUCCIONES",
-        capacidad: "4",
-        observaciones: "Simuladores",
-        horarios: "Sin horarios asignados"
-    },
-    "LOGÍSTICA": {
-        piso: "2",
-        descripcion: "LOGÍSTICA",
-        capacidad: "4",
-        observaciones: "Simuladores",
-        horarios: "De la Barrera, Liliana"
-    },
-    "HYS 2": {
-        piso: "2",
-        descripcion: "HYS2",
-        capacidad: "3",
-        observaciones: "Simuladores",
-        horarios: "Viera/García"
-    },
-    "STREAMING": {
-        piso: "2",
-        descripcion: "STREAMING",
-        capacidad: "4",
-        observaciones: "Micrófonos",
-        horarios: "Sin horarios asignados"
-    },
-    "ENERGÍA": {
-        piso: "2",
-        descripcion: "ENERGÍA",
-        capacidad: "24",
-        observaciones: "22 notebook",
-        horarios: "Salvo (Tarde/Noche), González (Mañ)"
-    },
-    "SUSTENTABILIDAD": {
-        piso: "2",
-        descripcion: "SUSTENTABILIDAD",
-        capacidad: "12",
-        observaciones: "Notebook",
-        horarios: "Ramirez, Haupt"
-    },
-    "DIGITAL": {
-        piso: "2",
-        descripcion: "DIGITAL",
-        capacidad: "12",
-        observaciones: "Notebook",
-        horarios: "Sin horarios asignados"
-    }
-};
-
-// Elementos DOM
-const tbody = document.querySelector("#calendarTable tbody");
-const labList = document.getElementById("labList");
-const modal = document.getElementById("modal");
-const closeModal = document.getElementById("closeModal");
-const monthCalendarEl = document.getElementById("monthCalendar");
-const modalTitle = document.getElementById("modalTitle");
-const btnHoy = document.getElementById("btnHoy");
-const btnLimpiar = document.getElementById("btnLimpiar");
-const btnHorarios = document.getElementById("btnHorarios");
-const prevDay = document.getElementById("prevDay");
-const nextDay = document.getElementById("nextDay");
-const currentDateDisplay = document.getElementById("currentDateDisplay");
-const datePicker = document.getElementById("datePicker");
-const viewButtons = document.querySelectorAll("[data-view]");
-const dayViewContainer = document.getElementById("dayViewContainer");
-const weekViewContainer = document.getElementById("weekViewContainer");
-const weekCalendarEl = document.getElementById("weekCalendar");
-const rangeModeBtn = document.getElementById("rangeModeBtn");
-const selectionInfo = document.getElementById("selectionInfo");
-const cancelSelection = document.getElementById("cancelSelection");
-const labTooltip = document.getElementById("labTooltip");
-const horariosModal = document.getElementById("horariosModal");
-const closeHorariosModal = document.getElementById("closeHorariosModal");
-const horariosGridContainer = document.getElementById("horariosGridContainer");
-
-// --- FUNCIÓN PARA MOSTRAR LA GRILLA DE HORARIOS ---
-function showTeacherSchedule() {
-    let html = '<table class="teacher-grid">';
-    html += '<tr><th>Día</th><th>Turno</th><th>Sustentabilidad</th><th>HyS</th><th>IA</th><th>Logística</th><th>Energías</th><th>Finanzas</th><th>RA/3D</th><th>Robótica</th><th>SUM</th></tr>';
-    
-    const dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
-    const turnos = ["Mañana (9–13)", "Tarde (14-17)", "Noche (18–21)", "SUM (17 a 21)"];
-    
-    dias.forEach(dia => {
-        let firstRow = true;
-        turnos.forEach(turno => {
-            if (teacherSchedule[dia] && teacherSchedule[dia][turno]) {
-                html += '<tr>';
-                if (firstRow) {
-                    html += `<td rowspan="4" class="day-header">${dia}</td>`;
-                    firstRow = false;
-                }
-                html += `<td class="turno ${turno.includes('SUM') ? 'sum-row' : ''}">${turno}</td>`;
-                html += `<td>${teacherSchedule[dia][turno]["SUSTENTABILIDAD"] || ''}</td>`;
-                html += `<td>${teacherSchedule[dia][turno]["HYS"] || ''}</td>`;
-                html += `<td>${teacherSchedule[dia][turno]["IA"] || ''}</td>`;
-                html += `<td>${teacherSchedule[dia][turno]["LOGÍSTICA"] || ''}</td>`;
-                html += `<td>${teacherSchedule[dia][turno]["ENERGÍA"] || ''}</td>`;
-                html += `<td>${teacherSchedule[dia][turno]["FINANZAS"] || ''}</td>`;
-                html += `<td>${teacherSchedule[dia][turno]["RA/3D"] || ''}</td>`;
-                html += `<td>${teacherSchedule[dia][turno]["ROBÓTICA"] || ''}</td>`;
-                html += `<td>${teacherSchedule[dia][turno]["SUM"] || ''}</td>`;
-                html += '</tr>';
-            }
-        });
-    });
-    
-    html += '</table>';
-    horariosGridContainer.innerHTML = html;
-    horariosModal.style.display = 'flex';
-}
-
-// --- FUNCIÓN PARA OBTENER HORARIOS DE UN LABORATORIO ESPECÍFICO ---
-function getLabSchedule(labName) {
-    let schedule = [];
-    const dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
-    const turnos = ["Mañana (9–13)", "Tarde (14-17)", "Noche (18–21)"];
-    
-    // Mapear el nombre del laboratorio al nombre en la grilla
-    let gridLabName = labName;
-    if (labName === "RA") gridLabName = "RA/3D";
-    if (labName === "HYS 2") gridLabName = "HYS"; // HYS 2 comparte horarios con HYS
-    if (labName === "TRANSPORTE") return []; // No tiene horarios
-    
-    dias.forEach(dia => {
-        turnos.forEach(turno => {
-            if (teacherSchedule[dia] && teacherSchedule[dia][turno]) {
-                const teacher = teacherSchedule[dia][turno][gridLabName];
-                if (teacher && teacher.trim() !== "" && teacher !== "vacante") {
-                    schedule.push(`${dia} ${turno}: ${teacher}`);
-                }
-            }
-        });
-        // También verificar SUM si aplica
-        if (labName === "SUM" && teacherSchedule[dia]["SUM (17 a 21)"]) {
-            const teacher = teacherSchedule[dia]["SUM (17 a 21)"]["SUM"];
-            if (teacher && teacher.trim() !== "") {
-                schedule.push(`${dia} SUM (17-21): ${teacher}`);
-            }
-        }
-    });
-    
-    return schedule;
-}
-
-// --- FUNCIÓN MEJORADA PARA EL TOOLTIP (CON DETECCIÓN DE LÍMITES DE PANTALLA) ---
-function showLabTooltip(labName, event) {
-    const info = labInfo[labName];
-    if (!info) return;
-    
-    const labSchedule = getLabSchedule(labName);
-    
-    let scheduleHtml = '';
-    if (labSchedule.length > 0) {
-        scheduleHtml = '<div class="teacher-schedule-mini"><span class="tooltip-label">📅 Horarios:</span><ul style="margin:5px 0 0 15px; padding-left:0;">';
-        labSchedule.forEach(item => {
-            scheduleHtml += `<li style="list-style-type: circle;">${item}</li>`;
-        });
-        scheduleHtml += '</ul></div>';
-    }
-    
-    labTooltip.innerHTML = `
-        <h4>${labName}</h4>
-        <p><span class="tooltip-label">📍 Piso:</span> ${info.piso}</p>
-        <p><span class="tooltip-label">📝 Descripción:</span> ${info.descripcion}</p>
-        <p><span class="tooltip-label">👥 Capacidad:</span> ${info.capacidad} puestos</p>
-        <p><span class="tooltip-label">💻 Obs.:</span> ${info.observaciones}</p>
-        ${scheduleHtml}
-    `;
-    
-    // Posicionar el tooltip
-    labTooltip.style.display = 'block';
-    
-    // Calcular posición
-    let left = event.pageX + 15;
-    let top = event.pageY - 50;
-    
-    // Obtener dimensiones del tooltip y la ventana
-    const tooltipRect = labTooltip.getBoundingClientRect();
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    
-    // Verificar si se sale por la derecha
-    if (left + tooltipRect.width > windowWidth - 10) {
-        left = event.pageX - tooltipRect.width - 15;
-    }
-    
-    // Verificar si se sale por la izquierda
-    if (left < 10) {
-        left = 10;
-    }
-    
-    // Verificar si se sale por abajo
-    if (top + tooltipRect.height > windowHeight - 10) {
-        top = event.pageY - tooltipRect.height - 10;
-    }
-    
-    // Verificar si se sale por arriba
-    if (top < 10) {
-        top = 10;
-    }
-    
-    labTooltip.style.left = left + 'px';
-    labTooltip.style.top = top + 'px';
-}
-
-// --- FUNCIÓN PARA OCULTAR EL TOOLTIP (¡AGREGAR ESTO!) ---
-function hideLabTooltip() {
-    labTooltip.style.display = 'none';
-}
-
-// --- INICIALIZACIÓN DE FIREBASE ---
+// ======================== FIREBASE CONFIG ========================
 const firebaseConfig = {
   apiKey: "AIzaSyCHnu_cC8x8pYDNs3Ji8xeRfiqn6dHoiQI",
   authDomain: "calendario-reservas-26959.firebaseapp.com",
@@ -1091,761 +521,593 @@ const firebaseConfig = {
   appId: "1:802756929675:web:cc339c160ae87117a9cc8e",
   measurementId: "G-TDFRDS6Y5W"
 };
-
-// Inicializar Firebase
 firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+const auth  = firebase.auth();
+const db    = firebase.firestore();
 
-// --- FUNCIONES PARA FIREBASE ---
-async function loadEventsFromFirebase() {
-    try {
-        const docRef = db.collection("calendario").doc("eventos");
-        const docSnap = await docRef.get();
-        
-        if (docSnap.exists) {
-            console.log("Eventos cargados desde Firebase");
-            return docSnap.data().events || {};
-        } else {
-            console.log("No hay eventos guardados, creando documento inicial...");
-            await db.collection("calendario").doc("eventos").set({ events: {} });
-            return {};
-        }
-    } catch (error) {
-        console.error("Error al cargar desde Firebase: ", error);
-        alert("Error al conectar con Firebase. Verifica tu conexión a internet.");
-        return {};
-    }
+// ======================== CONSTANTES ========================
+const labs   = ["SUM","HYS","TEXTIL","RA","ROBÓTICA","IA","FINANZAS","TRANSPORTE","LOGÍSTICA","HYS 2","STREAMING","ENERGÍA","SUSTENTABILIDAD","DIGITAL"];
+const colors = ["#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEEAD","#D4A5A5","#9B59B6","#3498DB","#E67E22","#2ECC71","#E74C3C","#1ABC9C","#F1C40F","#34495E"];
+const hours  = Array.from({length:14}, (_,i) => 8 + i); // 8:00 a 21:00
+
+const labInfo = {
+    "SUM":             { piso:"4", descripcion:"SUM",             capacidad:"80-100", observaciones:"Configurable",     horarios:"Sin horarios asignados" },
+    "HYS":             { piso:"3", descripcion:"HYS",             capacidad:"5",      observaciones:"Simuladores",      horarios:"Lun/Vie: Viera/García, Mié: Viera" },
+    "TEXTIL":          { piso:"3", descripcion:"TEXTIL",          capacidad:"8",      observaciones:"Notebook",         horarios:"Sin horarios asignados" },
+    "RA":              { piso:"3", descripcion:"RA",              capacidad:"12",     observaciones:"zSpace",           horarios:"Morgani/villagra (Mañ), Morgani (Tarde)" },
+    "ROBÓTICA":        { piso:"3", descripcion:"ROBÓTICA",        capacidad:"14",     observaciones:"Notebook",         horarios:"del Castillo, Forni, Mosquera, González" },
+    "IA":              { piso:"3", descripcion:"IA",              capacidad:"5",      observaciones:"Computadoras gamer",horarios:"Cacchione, Lopez" },
+    "FINANZAS":        { piso:"3", descripcion:"FINANZAS",        capacidad:"16",     observaciones:"Notebook/monitor", horarios:"Abasto (Mañ), Blanc (Tarde/Noche)" },
+    "TRANSPORTE":      { piso:"2", descripcion:"CONSTRUCCIONES",  capacidad:"4",      observaciones:"Simuladores",      horarios:"Sin horarios asignados" },
+    "LOGÍSTICA":       { piso:"2", descripcion:"LOGÍSTICA",       capacidad:"4",      observaciones:"Simuladores",      horarios:"De la Barrera, Liliana" },
+    "HYS 2":           { piso:"2", descripcion:"HYS2",           capacidad:"3",      observaciones:"Simuladores",      horarios:"Viera/García" },
+    "STREAMING":       { piso:"2", descripcion:"STREAMING",       capacidad:"4",      observaciones:"Micrófonos",       horarios:"Sin horarios asignados" },
+    "ENERGÍA":         { piso:"2", descripcion:"ENERGÍA",         capacidad:"24",     observaciones:"22 notebook",      horarios:"Salvo (Tarde/Noche), González (Mañ)" },
+    "SUSTENTABILIDAD": { piso:"2", descripcion:"SUSTENTABILIDAD", capacidad:"12",     observaciones:"Notebook",         horarios:"Ramirez, Haupt" },
+    "DIGITAL":         { piso:"2", descripcion:"DIGITAL",         capacidad:"12",     observaciones:"Notebook",         horarios:"Sin horarios asignados" }
+};
+
+const teacherSchedule = {
+    "Lunes":     { "Mañana (9–13)": {"SUSTENTABILIDAD":"Ramirez","HYS":"Viera","IA":"vacante","LOGÍSTICA":"De la Barrera","ENERGÍA":"vacante","FINANZAS":"Abasto","RA/3D":"Morgani/villagra","ROBÓTICA":"del Castillo"}, "Tarde (14-17)": {"SUSTENTABILIDAD":"Ramirez","HYS":"Viera/García","IA":"Cacchione","LOGÍSTICA":"Liliana","ENERGÍA":"Salvo","FINANZAS":"Blanc","RA/3D":"Morgani","ROBÓTICA":""}, "Noche (18–21)": {"SUSTENTABILIDAD":"vacante","HYS":"García","IA":"Lopez","LOGÍSTICA":"vacante","ENERGÍA":"Salvo","FINANZAS":"Blanc","RA/3D":"vacante","ROBÓTICA":"González"}, "SUM (17 a 21)":{"SUM":""} },
+    "Martes":    { "Mañana (9–13)": {"SUSTENTABILIDAD":"Haupt/Ramirez","HYS":"vacante","IA":"vacante","LOGÍSTICA":"De la Barrera","ENERGÍA":"González","FINANZAS":"Abasto","RA/3D":"Morgani/villagra","ROBÓTICA":"Forni"}, "Tarde (14-17)": {"SUSTENTABILIDAD":"Ramirez","HYS":"vacante","IA":"Cacchione","LOGÍSTICA":"vacante","ENERGÍA":"vacante","FINANZAS":"Blanc","RA/3D":"Morgani","ROBÓTICA":"Mosquera"}, "Noche (18–21)": {"SUSTENTABILIDAD":"vacante","HYS":"vacante","IA":"López","LOGÍSTICA":"vacante","ENERGÍA":"vacante","FINANZAS":"","RA/3D":"vacante","ROBÓTICA":""}, "SUM (17 a 21)":{"SUM":""} },
+    "Miércoles": { "Mañana (9–13)": {"SUSTENTABILIDAD":"Ramirez/Haupt","HYS":"Viera","IA":"Cacchione","LOGÍSTICA":"De la Barrera","ENERGÍA":"vacante","FINANZAS":"Abasto","RA/3D":"Villagra","ROBÓTICA":"del Castillo"}, "Tarde (14-17)": {"SUSTENTABILIDAD":"Haupt","HYS":"Viera/García","IA":"vacante","LOGÍSTICA":"Liliana","ENERGÍA":"Salvo","FINANZAS":"","RA/3D":"Morgani","ROBÓTICA":"Mosquera"}, "Noche (18–21)": {"SUSTENTABILIDAD":"Haupt","HYS":"García","IA":"Lopez","LOGÍSTICA":"vacante","ENERGÍA":"Salvo","FINANZAS":"Blanc","RA/3D":"vacante","ROBÓTICA":"González"}, "SUM (17 a 21)":{"SUM":""} },
+    "Jueves":    { "Mañana (9–13)": {"SUSTENTABILIDAD":"Haupt/Ramirez","HYS":"vacante","IA":"vacante","LOGÍSTICA":"De la Barrera","ENERGÍA":"Gonzalez","FINANZAS":"Abasto","RA/3D":"Morgani/villagra","ROBÓTICA":"Forni"}, "Tarde (14-17)": {"SUSTENTABILIDAD":"Ramirez","HYS":"vacante","IA":"Cacchione","LOGÍSTICA":"Liliana","ENERGÍA":"vacante","FINANZAS":"","RA/3D":"Morgani","ROBÓTICA":""}, "Noche (18–21)": {"SUSTENTABILIDAD":"vacante","HYS":"vacante","IA":"Lopez","LOGÍSTICA":"vacante","ENERGÍA":"vacante","FINANZAS":"Blanc","RA/3D":"vacante","ROBÓTICA":"Mosquera"}, "SUM (17 a 21)":{"SUM":""} },
+    "Viernes":   { "Mañana (9–13)": {"SUSTENTABILIDAD":"Ramirez","HYS":"Viera","IA":"vacante","LOGÍSTICA":"De la Barrera","ENERGÍA":"vacante","FINANZAS":"Abasto","RA/3D":"Morgani/villagra","ROBÓTICA":"del Castillo"}, "Tarde (14-17)": {"SUSTENTABILIDAD":"Ramirez","HYS":"Viera/García","IA":"Cacchione","LOGÍSTICA":"","ENERGÍA":"Salvo","FINANZAS":"","RA/3D":"Morgani","ROBÓTICA":""}, "Noche (18–21)": {"SUSTENTABILIDAD":"vacante","HYS":"García","IA":"Lopez","LOGÍSTICA":"vacante","ENERGÍA":"Salvo","FINANZAS":"Blanc","RA/3D":"vacante","ROBÓTICA":"González"}, "SUM (17 a 21)":{"SUM":""} }
+};
+
+// ======================== ESTADO GLOBAL ========================
+let currentUser      = null;
+let isAdmin          = false;
+let events           = {};
+let currentView      = 'diario';
+let currentDate      = new Date();
+let weekCalendar     = null;
+let monthCalendar    = null;
+let rangeModeActive  = false;
+let selectionStart   = { hour: null, half: null };
+let selectionEnd     = { hour: null, half: null };
+let selectedLab      = null;
+let draggedEvent     = null;
+let unsubscribeEvents = null;
+let dndInitialized   = false;
+
+// ======================== HELPERS DE FECHA (ZONA GMT-3) ========================
+function getLocalDateKey(date) {
+    const y  = date.getFullYear();
+    const m  = String(date.getMonth() + 1).padStart(2, '0');
+    const d  = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 }
+function getCurrentDateKey() { return getLocalDateKey(currentDate); }
 
-let saveTimeout;
-function saveEventsToFirebase(newEvents) {
-    events = newEvents;
-    
-    if (saveTimeout) clearTimeout(saveTimeout);
-    
-    saveTimeout = setTimeout(async () => {
-        try {
-            await db.collection("calendario").doc("eventos").set({ events: events });
-            console.log("Eventos guardados en Firebase");
-        } catch (error) {
-            console.error("Error al guardar en Firebase: ", error);
-            alert("Error al guardar en Firebase. Los cambios podrían perderse.");
-        }
-    }, 1000);
-}
-
-// --- FUNCIONES DE UTILIDAD ---
-function formatDate(date) {
-    return date.toLocaleDateString('es-ES', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+function formatDateLocal(date) {
+    return date.toLocaleDateString('es-AR', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
 }
+function isWeekend(date) { const d = date.getDay(); return d === 0 || d === 6; }
+function getWeekendText(date) { return date.getDay() === 0 ? "DOMINGO" : "SÁBADO"; }
+function generateEventId() { return 'evt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9); }
 
-function updateDateDisplay() {
-    currentDateDisplay.textContent = formatDate(currentDate);
-    datePicker.value = currentDate.toISOString().split('T')[0];
-    
-    if (currentView === 'diario') {
-        renderDayView();
-    } else {
-        renderWeekView();
-    }
+// ======================== FIRESTORE – OPERACIONES ATÓMICAS ========================
+// Cada reserva es un documento independiente → no hay riesgo de que un PC pise los datos de otro.
+// El listener onSnapshot mantiene todos los clientes sincronizados en tiempo real.
+
+function subscribeToEvents() {
+    if (unsubscribeEvents) unsubscribeEvents();
+    unsubscribeEvents = db.collection('reservas').onSnapshot(snapshot => {
+        events = {};
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (!data.fecha || !data.laboratorio) return;
+            const { fecha, laboratorio: lab } = data;
+            if (!events[fecha])       events[fecha]       = {};
+            if (!events[fecha][lab])  events[fecha][lab]  = {};
+            events[fecha][lab][doc.id] = {
+                id:          doc.id,
+                title:       data.titulo       || '',
+                startHour:   data.inicio?.hour  || 0,
+                startMinute: data.inicio?.minute || 0,
+                endHour:     data.fin?.hour      || 0,
+                endMinute:   data.fin?.minute    || 0,
+                color:       data.color         || colors[labs.indexOf(lab)] || '#153244',
+                creadoPor:   data.creadoPor
+            };
+        });
+        // Re-render automático para TODOS los clientes conectados
+        if (currentView === 'diario') renderDayView();
+        else renderWeekView();
+        if (monthCalendar) monthCalendar.refetchEvents();
+    }, err => console.error("Error en listener reservas:", err));
 }
 
-function getCurrentDateKey() {
-    return currentDate.toISOString().split("T")[0];
+async function agregarReserva(fecha, lab, titulo, sh, sm, eh, em, color) {
+    try {
+        const ref = await db.collection('reservas').add({
+            fecha, laboratorio: lab, titulo,
+            inicio: { hour: sh, minute: sm },
+            fin:    { hour: eh, minute: em },
+            color, creadoPor: currentUser?.uid || 'anonimo',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        return ref.id;
+    } catch(e) { console.error(e); alert("Error al guardar reserva."); return null; }
 }
 
-// AGREGAR ESTAS TRES FUNCIONES A PARTIR DE ACÁ ↓↓↓
-
-function isWeekend(date) {
-    const day = date.getDay();
-    return day === 0 || day === 6;
+async function actualizarReserva(id, data) {
+    try {
+        await db.collection('reservas').doc(id).update({
+            ...data,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch(e) { console.error(e); alert("Error al actualizar reserva."); }
 }
 
-function getWeekendText(date) {
-    return date.getDay() === 0 ? "DOMINGO" : "SÁBADO";
+async function eliminarReserva(id) {
+    try {
+        await db.collection('reservas').doc(id).delete();
+    } catch(e) { console.error(e); alert("Error al eliminar reserva."); }
 }
 
-function hasOverlap(dateKey, lab, newStartHour, newStartMinute, newEndHour, newEndMinute, excludeEventId = null) {
-    if (!events[dateKey] || !events[dateKey][lab]) return false;
-    
-    const newStartMinutes = newStartHour * 60 + newStartMinute;
-    const newEndMinutes = newEndHour * 60 + newEndMinute;
-    
-    for (let evId in events[dateKey][lab]) {
-        if (excludeEventId === evId) continue;
-        const ev = events[dateKey][lab][evId];
-        const evStart = ev.startHour * 60 + (ev.startMinute || 0);
-        const evEnd = ev.endHour * 60 + (ev.endMinute || 0);
-        
-        if (newStartMinutes < evEnd && newEndMinutes > evStart) {
-            return true;
+// Migración única: mueve datos del formato viejo (un solo doc) al nuevo (colección)
+async function migrarDatosAntiguos() {
+    try {
+        const oldDoc = await db.collection("calendario").doc("eventos").get();
+        if (!oldDoc.exists) return;
+        const oldData = oldDoc.data();
+        if (oldData.migrado) return; // Ya migrado
+
+        const oldEvents = oldData.events || {};
+        const eventsList = [];
+        for (const fecha in oldEvents) {
+            for (const lab in oldEvents[fecha]) {
+                for (const id in oldEvents[fecha][lab]) {
+                    eventsList.push({ id, fecha, lab, ev: oldEvents[fecha][lab][id] });
+                }
+            }
         }
+
+        if (eventsList.length === 0) {
+            await db.collection("calendario").doc("eventos").update({ migrado: true });
+            return;
+        }
+
+        console.log(`Migrando ${eventsList.length} eventos al nuevo formato...`);
+        // Procesar en lotes de 450 (límite de Firestore es 500)
+        for (let i = 0; i < eventsList.length; i += 450) {
+            const batch = db.batch();
+            eventsList.slice(i, i + 450).forEach(({ id, fecha, lab, ev }) => {
+                const ref = db.collection('reservas').doc(id);
+                batch.set(ref, {
+                    fecha, laboratorio: lab,
+                    titulo: ev.title || '',
+                    inicio: { hour: ev.startHour || 0, minute: ev.startMinute || 0 },
+                    fin:    { hour: ev.endHour   || 0, minute: ev.endMinute   || 0 },
+                    color:  ev.color || '#153244',
+                    creadoPor: 'migracion',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+            });
+            await batch.commit();
+        }
+        await db.collection("calendario").doc("eventos").update({ migrado: true });
+        console.log("Migración completada.");
+    } catch(e) { console.error("Error en migración:", e); }
+}
+
+// ======================== AUTENTICACIÓN ========================
+async function checkAdminStatus(user) {
+    if (!user) return false;
+    try {
+        const doc = await db.collection('usuarios').doc(user.uid).get();
+        return doc.exists && doc.data().rol === 'admin';
+    } catch(e) { return false; }
+}
+
+function showLoginError(msg) {
+    const el = document.getElementById('loginError');
+    el.textContent = msg;
+    el.classList.add('visible');
+}
+function hideLoginError() {
+    document.getElementById('loginError').classList.remove('visible');
+}
+
+// ======================== AUTENTICACIÓN CON GOOGLE ========================
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+document.getElementById('googleLoginBtn').onclick = async () => {
+    const errorDiv = document.getElementById('loginError');
+    errorDiv.style.display = 'none';
+    try {
+        const result = await auth.signInWithPopup(googleProvider);
+        // El usuario ya está autenticado, el onAuthStateChanged se encarga del resto
+    } catch (err) {
+        errorDiv.style.display = 'block';
+        errorDiv.textContent = 'Error al iniciar sesión: ' + err.message;
+        errorDiv.style.color = '#e74c3c';
+        errorDiv.style.background = '#fdecea';
+        errorDiv.style.padding = '8px';
+        errorDiv.style.borderRadius = '6px';
+    }
+};
+
+document.getElementById('btnLogout').onclick = async () => {
+    if (unsubscribeEvents) { unsubscribeEvents(); unsubscribeEvents = null; }
+    await auth.signOut();
+};
+
+
+// ======================== PANEL DE USUARIOS (admin) ========================
+document.getElementById('btnAdminUsers').onclick  = () => loadAdminPanel();
+document.getElementById('closeAdminModal').onclick = () => document.getElementById('adminModal').classList.remove('visible');
+
+async function loadAdminPanel() {
+    if (!isAdmin) { alert("Sin permisos."); return; }
+    const snap = await db.collection('usuarios').get();
+    let html = '<table class="admin-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Acción</th></tr></thead><tbody>';
+    snap.forEach(doc => {
+        const d = doc.data();
+        html += `<tr>
+            <td>${d.email || '—'}</td>
+            <td>${d.nombre || '—'}</td>
+            <td>
+              <select id="rol-${doc.id}">
+                <option value="user"  ${d.rol === 'user'  ? 'selected' : ''}>user</option>
+                <option value="admin" ${d.rol === 'admin' ? 'selected' : ''}>admin</option>
+              </select>
+            </td>
+            <td><button onclick="cambiarRol('${doc.id}')">Actualizar</button></td>
+          </tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('userList').innerHTML = html;
+    document.getElementById('adminModal').classList.add('visible');
+}
+
+window.cambiarRol = async (uid) => {
+    const rol = document.getElementById(`rol-${uid}`).value;
+    await db.collection('usuarios').doc(uid).update({ rol });
+    alert("Rol actualizado correctamente.");
+    loadAdminPanel();
+};
+
+// ======================== LÓGICA DE SUPERPOSICIÓN ========================
+function hasOverlap(dateKey, lab, sh, sm, eh, em, excludeId = null) {
+    if (!events[dateKey] || !events[dateKey][lab]) return false;
+    const ns = sh * 60 + sm, ne = eh * 60 + em;
+    for (const id in events[dateKey][lab]) {
+        if (id === excludeId) continue;
+        const ev = events[dateKey][lab][id];
+        const es = ev.startHour * 60 + (ev.startMinute || 0);
+        const ee = ev.endHour   * 60 + (ev.endMinute   || 0);
+        if (ns < ee && ne > es) return true;
     }
     return false;
 }
 
-function generateEventId() {
-    return 'evt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+// ======================== OPERACIONES DE EVENTOS (UI) ========================
+async function createSingleEvent(lab, hour, half) {
+    if (isWeekend(currentDate)) { alert(`No se puede reservar el ${getWeekendText(currentDate)}.`); return; }
+    const title = prompt(`Nuevo evento en ${lab} — ${hour}:${String(half).padStart(2,'0')}`, "");
+    if (!title) return;
+
+    const dateKey   = getCurrentDateKey();
+    let endH = parseInt(hour), endM = parseInt(half) + 60;
+    if (endM >= 60) { endH++; endM -= 60; }
+
+    if (endH > 22) { alert("El evento excede el horario máximo (22:00)."); return; }
+    if (hasOverlap(dateKey, lab, parseInt(hour), parseInt(half), endH, endM)) {
+        alert("❌ Horario ya ocupado en este laboratorio."); return;
+    }
+
+    await agregarReserva(dateKey, lab, title, parseInt(hour), parseInt(half), endH, endM, colors[labs.indexOf(lab)]);
+    // onSnapshot actualiza automáticamente
 }
 
-// --- FUNCIONES DE MANEJO DE EVENTOS (TODAS IGUALES) ---
-function createSingleEvent(lab, hour, half) {
-    const title = prompt(`Nuevo evento en ${lab} - ${hour}:${half.toString().padStart(2,'0')}`, "");
-    
-    if (title) {
-        const dateKey = getCurrentDateKey();
-        const eventId = generateEventId();
-        
-        if (!events[dateKey]) events[dateKey] = {};
-        if (!events[dateKey][lab]) events[dateKey][lab] = {};
-        
-        let endHour = parseInt(hour);
-        let endMinute = parseInt(half);
-        
-        endMinute += 60;
-        if (endMinute >= 60) {
-            endHour += 1;
-            endMinute -= 60;
-        }
-        
-        // ↓↓↓ AGREGAR ESTAS VALIDACIONES ACÁ ↓↓↓
-        
-        // Validar fin de semana
-        if (isWeekend(currentDate)) {
-            alert(`No se pueden crear reservas los fines de semana (${getWeekendText(currentDate)}).`);
-            return;
-        }
-        
-        // Validar superposición
-        if (hasOverlap(dateKey, lab, parseInt(hour), parseInt(half), endHour, endMinute)) {
-            alert("❌ ERROR: Este horario ya está ocupado en este laboratorio.");
-            return;
-        }
-        
-        // ↑↑↑ HASTA ACÍ ↑↑↑
-        
-        events[dateKey][lab][eventId] = {
-            id: eventId,
-            title: title,
-            startHour: parseInt(hour),
-            startMinute: parseInt(half),
-            endHour: endHour,
-            endMinute: endMinute,
-            color: colors[labs.indexOf(lab)]
-        };
-        
-        saveEventsToFirebase(events);
-        renderDayView();
-        if (weekCalendar) renderWeekView();
-        if (monthCalendar) monthCalendar.refetchEvents();
-        initializeDragAndDrop();
-    }
-}
+async function createRangeEvent(lab, sh, sm, eh, em, durationMin) {
+    if (isWeekend(currentDate)) { alert(`No se puede reservar el ${getWeekendText(currentDate)}.`); return; }
+    const title = prompt(
+        `Nuevo bloque en ${lab}\nHorario: ${sh}:${String(sm).padStart(2,'0')} a ${eh}:${String(em).padStart(2,'0')} (${durationMin} min)`, ""
+    );
+    if (!title) return;
 
-function handleMouseUp(e) {
-    if (!rangeModeActive || !selectionStart.hour) return;
-    
-    const td = e.currentTarget;
-    if (td.dataset.lab !== selectedLab) {
-        cancelRangeSelection();
-        return;
-    }
-    
-    const startMinutes = selectionStart.hour * 60 + selectionStart.half;
-    const endMinutes = selectionEnd.hour * 60 + selectionEnd.half + 30;
-    const durationMinutes = Math.abs(endMinutes - startMinutes);
-    
-    const startHour = Math.floor(Math.min(startMinutes, endMinutes) / 60);
-    const startMinute = Math.min(startMinutes, endMinutes) % 60;
-    const endHour = Math.floor(Math.max(startMinutes, endMinutes) / 60);
-    const endMinute = Math.max(startMinutes, endMinutes) % 60;
-    
-    const title = prompt(`Nuevo bloque en ${selectedLab}\nHorario: ${startHour}:${startMinute.toString().padStart(2,'0')} a ${endHour}:${endMinute.toString().padStart(2,'0')} (${durationMinutes} minutos)`, "");
-    
-    if (title) {
-        const dateKey = getCurrentDateKey();
-        const eventId = generateEventId();
-        
-        // ↓↓↓ AGREGÁ ESTAS LÍNEAS NUEVAS ACÁ ↓↓↓
-        
-        // Validar fin de semana
-        if (isWeekend(currentDate)) {
-            alert(`No se pueden crear reservas los fines de semana (${getWeekendText(currentDate)}).`);
-            cancelRangeSelection();
-            return;
-        }
-        
-        // Validar superposición
-        if (hasOverlap(dateKey, selectedLab, startHour, startMinute, endHour, endMinute)) {
-            alert("❌ ERROR: El rango seleccionado se superpone con otro evento.");
-            cancelRangeSelection();
-            return;
-        }
-        
-        // ↑↑↑ HASTA ACÁ LAS LÍNEAS NUEVAS ↑↑↑
-        
-        if (!events[dateKey]) events[dateKey] = {};
-        if (!events[dateKey][selectedLab]) events[dateKey][selectedLab] = {};
-        
-        events[dateKey][selectedLab][eventId] = {
-            id: eventId,
-            title: title,
-            startHour: startHour,
-            startMinute: startMinute,
-            endHour: endHour,
-            endMinute: endMinute,
-            duration: durationMinutes,
-            color: colors[labs.indexOf(selectedLab)]
-        };
-        
-        saveEventsToFirebase(events);
-        renderDayView();
-        if (weekCalendar) renderWeekView();
-        if (monthCalendar) monthCalendar.refetchEvents();
-        initializeDragAndDrop();
-    }
-    
-    cancelRangeSelection();
-}
-
-function editEvent(dateKey, lab, eventId) {
-    if (!events[dateKey] || !events[dateKey][lab] || !events[dateKey][lab][eventId]) return;
-    
-    const newTitle = prompt("Editar título:", events[dateKey][lab][eventId].title);
-    if (newTitle) {
-        events[dateKey][lab][eventId].title = newTitle;
-        saveEventsToFirebase(events);
-        renderDayView();
-        if (weekCalendar) renderWeekView();
-        if (monthCalendar) monthCalendar.refetchEvents();
-    }
-}
-
-function adjustEventTime(dateKey, lab, eventId, event) {
-    const newStart = prompt("Hora de inicio (ej: 9:30):", `${event.startHour}:${event.startMinute.toString().padStart(2,'0')}`);
-    const newEnd = prompt("Hora de fin (ej: 12:30):", `${event.endHour}:${event.endMinute.toString().padStart(2,'0')}`);
-    
-    if (newStart && newEnd) {
-        const [startH, startM] = newStart.split(':').map(Number);
-        const [endH, endM] = newEnd.split(':').map(Number);
-        
-        if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
-            
-            // ↓↓↓ AGREGÁ ESTAS LÍNEAS NUEVAS ACÁ ↓↓↓
-            
-            // Validar superposición con otros eventos (excluyendo este mismo)
-            if (hasOverlap(dateKey, lab, startH, startM || 0, endH, endM || 0, eventId)) {
-                alert("❌ ERROR: El nuevo horario se superpone con otro evento en este laboratorio.");
-                return; // Salir sin guardar los cambios
-            }
-            
-            // ↑↑↑ HASTA ACÁ LAS LÍNEAS NUEVAS ↑↑↑
-            
-            events[dateKey][lab][eventId].startHour = startH;
-            events[dateKey][lab][eventId].startMinute = startM || 0;
-            events[dateKey][lab][eventId].endHour = endH;
-            events[dateKey][lab][eventId].endMinute = endM || 0;
-            
-            saveEventsToFirebase(events);
-            renderDayView();
-            if (weekCalendar) renderWeekView();
-            if (monthCalendar) monthCalendar.refetchEvents();
-        }
-    }
-}
-
-function deleteEvent(dateKey, lab, eventId) {
-    if (!events[dateKey] || !events[dateKey][lab] || !events[dateKey][lab][eventId]) return;
-    
-    if (confirm("¿Eliminar este bloque?")) {
-        delete events[dateKey][lab][eventId];
-        
-        if (Object.keys(events[dateKey][lab]).length === 0) {
-            delete events[dateKey][lab];
-        }
-        if (Object.keys(events[dateKey]).length === 0) {
-            delete events[dateKey];
-        }
-        
-        saveEventsToFirebase(events);
-        renderDayView();
-        if (weekCalendar) renderWeekView();
-        if (monthCalendar) monthCalendar.refetchEvents();
-    }
-}
-
-function moveEvent(eventDiv, targetCell) {
-    const oldLab = eventDiv.dataset.lab;
-    const dateKey = eventDiv.dataset.dateKey;
-    const eventId = eventDiv.dataset.eventId;
-    const newLab = targetCell.dataset.lab;
-    const newHour = parseInt(targetCell.dataset.hour);
-    const newHalf = parseInt(targetCell.dataset.half);
-    
-    if (events[dateKey] && events[dateKey][oldLab] && events[dateKey][oldLab][eventId]) {
-        const eventData = events[dateKey][oldLab][eventId];
-        
-        const startMinutes = eventData.startHour * 60 + (eventData.startMinute || 0);
-        const endMinutes = eventData.endHour * 60 + (eventData.endMinute || 0);
-        const durationMinutes = endMinutes - startMinutes;
-        
-        const newStartMinutes = newHour * 60 + newHalf;
-        const newEndMinutes = newStartMinutes + durationMinutes;
-        
-        const newEndHour = Math.floor(newEndMinutes / 60);
-        const newEndMinute = newEndMinutes % 60;
-        
-        // ↓↓↓ AGREGÁ ESTAS LÍNEAS NUEVAS ACÁ ↓↓↓
-        
-        // Validar que la fecha no sea fin de semana
-        const targetDate = new Date(dateKey + 'T12:00:00');
-        if (isWeekend(targetDate)) {
-            alert("❌ No se pueden mover eventos a fines de semana.");
-            return;
-        }
-        
-        // Validar superposición en el destino
-        if (hasOverlap(dateKey, newLab, newHour, newHalf, newEndHour, newEndMinute, eventId)) {
-            alert("❌ No se puede mover: el destino tiene un evento superpuesto.");
-            return;
-        }
-        
-        // ↑↑↑ HASTA ACÁ LAS LÍNEAS NUEVAS ↑↑↑
-        
-        if (!events[dateKey][newLab]) events[dateKey][newLab] = {};
-        
-        events[dateKey][newLab][eventId] = {
-            id: eventId,
-            title: eventData.title,
-            startHour: newHour,
-            startMinute: newHalf,
-            endHour: newEndHour,
-            endMinute: newEndMinute,
-            color: colors[labs.indexOf(newLab)]
-        };
-        
-        delete events[dateKey][oldLab][eventId];
-        
-        if (Object.keys(events[dateKey][oldLab]).length === 0) {
-            delete events[dateKey][oldLab];
-        }
-        
-        saveEventsToFirebase(events);
-        renderDayView();
-        if (weekCalendar) renderWeekView();
-        if (monthCalendar) monthCalendar.refetchEvents();
-        initializeDragAndDrop();
-    }
-}
-
-btnLimpiar.addEventListener("click", () => {
     const dateKey = getCurrentDateKey();
-    if (confirm(`¿Eliminar TODOS los eventos del ${formatDate(currentDate)}?`)) {
-        delete events[dateKey];
-        saveEventsToFirebase(events);
-        
-        if (currentView === 'diario') {
-            renderDayView();
-        } else {
-            renderWeekView();
-        }
-        if (monthCalendar) monthCalendar.refetchEvents();
+    if (hasOverlap(dateKey, lab, sh, sm, eh, em)) {
+        alert("❌ Superposición con otro evento."); return;
     }
-});
-    
-// --- CONSTRUIR TABLA ---
+    await agregarReserva(dateKey, lab, title, sh, sm, eh, em, colors[labs.indexOf(lab)]);
+}
+
+async function editEvent(dateKey, lab, eventId) {
+    const ev = events[dateKey]?.[lab]?.[eventId];
+    if (!ev) return;
+    const newTitle = prompt("Editar título:", ev.title);
+    if (newTitle && newTitle !== ev.title) {
+        await actualizarReserva(eventId, { titulo: newTitle });
+    }
+}
+
+async function adjustEventTime(dateKey, lab, eventId, ev) {
+    const newStart = prompt("Hora de inicio (ej: 9:30):",  `${ev.startHour}:${String(ev.startMinute||0).padStart(2,'0')}`);
+    const newEnd   = prompt("Hora de fin   (ej: 12:30):", `${ev.endHour}:${String(ev.endMinute||0).padStart(2,'0')}`);
+    if (!newStart || !newEnd) return;
+
+    const [sh, sm] = newStart.split(':').map(Number);
+    const [eh, em] = newEnd.split(':').map(Number);
+    if ([sh, sm, eh, em].some(isNaN)) { alert("Formato de hora inválido."); return; }
+    if (sh * 60 + sm >= eh * 60 + em)  { alert("La hora de fin debe ser posterior a la de inicio."); return; }
+    if (hasOverlap(dateKey, lab, sh, sm||0, eh, em||0, eventId)) {
+        alert("❌ Superposición con otro evento."); return;
+    }
+    await actualizarReserva(eventId, {
+        inicio: { hour: sh, minute: sm || 0 },
+        fin:    { hour: eh, minute: em || 0 }
+    });
+}
+
+async function deleteEvent(dateKey, lab, eventId) {
+    if (!events[dateKey]?.[lab]?.[eventId]) return;
+    if (confirm("¿Eliminar este bloque de reserva?")) {
+        await eliminarReserva(eventId);
+    }
+}
+
+async function moveEvent(eventDiv, targetCell) {
+    const eventId    = eventDiv.dataset.eventId;
+    const oldLab     = eventDiv.dataset.lab;
+    const dateKey    = eventDiv.dataset.dateKey;
+    const newLab     = targetCell.dataset.lab;
+    const newHour    = parseInt(targetCell.dataset.hour);
+    const newHalf    = parseInt(targetCell.dataset.half);
+
+    const ev = events[dateKey]?.[oldLab]?.[eventId];
+    if (!ev) { renderDayView(); return; }
+
+    const duration     = (ev.endHour * 60 + (ev.endMinute || 0)) - (ev.startHour * 60 + (ev.startMinute || 0));
+    const newEndTotal  = newHour * 60 + newHalf + duration;
+    const newEndH      = Math.floor(newEndTotal / 60);
+    const newEndM      = newEndTotal % 60;
+
+    if (isWeekend(new Date(dateKey + 'T12:00:00'))) {
+        alert("No se puede mover a un fin de semana."); renderDayView(); return;
+    }
+    const excludeId = (newLab === oldLab) ? eventId : null;
+    if (hasOverlap(dateKey, newLab, newHour, newHalf, newEndH, newEndM, excludeId)) {
+        alert("❌ Destino ocupado."); renderDayView(); return;
+    }
+    await actualizarReserva(eventId, {
+        laboratorio: newLab,
+        inicio: { hour: newHour, minute: newHalf },
+        fin:    { hour: newEndH, minute: newEndM }
+    });
+}
+
+async function clearDay() {
+    const dateKey = getCurrentDateKey();
+    if (!confirm(`¿Eliminar TODAS las reservas del ${formatDateLocal(currentDate)}?`)) return;
+    const snap = await db.collection('reservas').where('fecha', '==', dateKey).get();
+    if (snap.empty) return;
+    const docs = snap.docs;
+    for (let i = 0; i < docs.length; i += 450) {
+        const batch = db.batch();
+        docs.slice(i, i + 450).forEach(d => batch.delete(d.ref));
+        await batch.commit();
+    }
+}
+
+// ======================== CONSTRUCCIÓN DE TABLA ========================
 function buildTable() {
     const thead = document.querySelector("#calendarTable thead tr");
     thead.innerHTML = '<th>Hora</th>';
-    
     labs.forEach(lab => {
         const th = document.createElement("th");
         th.textContent = lab;
-        th.title = lab;
-        
-        th.addEventListener("mouseenter", (e) => {
-            showLabTooltip(lab, e);
-        });
+        th.addEventListener("mouseenter", e => showLabTooltip(lab, e));
         th.addEventListener("mouseleave", hideLabTooltip);
-     th.addEventListener("mousemove", (e) => {
-    showLabTooltip(lab, e);
-});
-        
-        th.addEventListener("click", (e) => {
-            e.stopPropagation();
-            openModalLab(lab);
-        });
-        
+        th.addEventListener("mousemove",  e => showLabTooltip(lab, e));
+        th.addEventListener("click",      e => { e.stopPropagation(); openModalLab(lab); });
         thead.appendChild(th);
     });
 
+    const tbody = document.querySelector("#calendarTable tbody");
     tbody.innerHTML = "";
-    
-    hours.forEach((h) => {
+    hours.forEach(h => {
+        // Fila :00
         const tr00 = document.createElement("tr");
         const th00 = document.createElement("th");
-        th00.textContent = `${h}:00`;
-        th00.className = 'time-slot';
-        th00.rowSpan = 2;
+        th00.textContent = `${h}:00`; th00.className = 'time-slot'; th00.rowSpan = 2;
         tr00.appendChild(th00);
-        
-        labs.forEach(lab => {
-            const td = document.createElement("td");
-            td.dataset.lab = lab;
-            td.dataset.hour = h;
-            td.dataset.half = 0;
-            
-            td.addEventListener("click", (e) => {
-                if (!rangeModeActive && e.target === td) {
-                    createSingleEvent(td.dataset.lab, td.dataset.hour, td.dataset.half);
-                }
-            });
-            
-            td.addEventListener("mousedown", handleMouseDown);
-            td.addEventListener("mouseenter", handleMouseEnter);
-            td.addEventListener("mouseup", handleMouseUp);
-            
-            tr00.appendChild(td);
-        });
+        labs.forEach(lab => tr00.appendChild(makeCell(lab, h, 0)));
         tbody.appendChild(tr00);
-        
+        // Fila :30
         const tr30 = document.createElement("tr");
-        labs.forEach(lab => {
-            const td = document.createElement("td");
-            td.dataset.lab = lab;
-            td.dataset.hour = h;
-            td.dataset.half = 30;
-            
-            td.addEventListener("click", (e) => {
-                if (!rangeModeActive && e.target === td) {
-                    createSingleEvent(td.dataset.lab, td.dataset.hour, td.dataset.half);
-                }
-            });
-            
-            td.addEventListener("mousedown", handleMouseDown);
-            td.addEventListener("mouseenter", handleMouseEnter);
-            td.addEventListener("mouseup", handleMouseUp);
-            
-            tr30.appendChild(td);
-        });
+        labs.forEach(lab => tr30.appendChild(makeCell(lab, h, 30)));
         tbody.appendChild(tr30);
     });
 }
 
-// --- FUNCIONES DE SELECCIÓN DE RANGO ---
-function handleMouseDown(e) {
-    if (!rangeModeActive) return;
-    e.preventDefault();
-    
-    const td = e.currentTarget;
-    selectedLab = td.dataset.lab;
-    selectionStart = {
-        hour: parseInt(td.dataset.hour),
-        half: parseInt(td.dataset.half)
-    };
-    selectionEnd = { ...selectionStart };
-    
-    clearSelection();
-    td.classList.add('selected');
+function makeCell(lab, h, half) {
+    const td = document.createElement("td");
+    td.dataset.lab  = lab;
+    td.dataset.hour = h;
+    td.dataset.half = half;
+    td.addEventListener("click",      e => { if (!rangeModeActive && e.target === td) createSingleEvent(lab, h, half); });
+    td.addEventListener("mousedown",  handleMouseDown);
+    td.addEventListener("mouseenter", handleMouseEnter);
+    td.addEventListener("mouseup",    handleMouseUp);
+    return td;
 }
 
-function handleMouseEnter(e) {
-    if (!rangeModeActive || !selectionStart.hour) return;
-    
-    const td = e.currentTarget;
-    if (td.dataset.lab !== selectedLab) return;
-    
-    selectionEnd = {
-        hour: parseInt(td.dataset.hour),
-        half: parseInt(td.dataset.half)
-    };
-    
-    clearSelection();
-    
-    const startMinutes = selectionStart.hour * 60 + selectionStart.half;
-    const endMinutes = selectionEnd.hour * 60 + selectionEnd.half;
-    const minMinutes = Math.min(startMinutes, endMinutes);
-    const maxMinutes = Math.max(startMinutes, endMinutes);
-    
-    for (let h = 8; h <= 21; h++) {
-        for (let half of [0, 30]) {
-            const currentMinutes = h * 60 + half;
-            if (currentMinutes >= minMinutes && currentMinutes <= maxMinutes) {
-                const cell = document.querySelector(`td[data-lab="${selectedLab}"][data-hour="${h}"][data-half="${half}"]`);
-                if (cell) {
-                    cell.classList.add('selecting');
-                }
-            }
-        }
-    }
-}
-
-function clearSelection() {
-    document.querySelectorAll('#calendarTable td.selected, #calendarTable td.selecting').forEach(td => {
-        td.classList.remove('selected', 'selecting');
-    });
-}
-
-function cancelRangeSelection() {
-    selectionStart = { hour: null, half: null };
-    selectionEnd = { hour: null, half: null };
-    selectedLab = null;
-    clearSelection();
-}
-
-rangeModeBtn.addEventListener("click", () => {
-    rangeModeActive = !rangeModeActive;
-    rangeModeBtn.classList.toggle('active');
-    selectionInfo.classList.toggle('active', rangeModeActive);
-    
-    if (!rangeModeActive) {
-        cancelRangeSelection();
-    }
-});
-
-cancelSelection.addEventListener("click", () => {
-    rangeModeActive = false;
-    rangeModeBtn.classList.remove('active');
-    selectionInfo.classList.remove('active');
-    cancelRangeSelection();
-});
-
-// --- RENDERIZADO DE VISTAS ---
+// ======================== RENDERIZADO VISTA DIARIA ========================
 function renderDayView() {
-    document.querySelectorAll("#calendarTable td").forEach(td => {
-        td.innerHTML = '';
-    });
-    
+    document.querySelectorAll("#calendarTable td").forEach(td => { td.innerHTML = ''; });
+
     const dateKey = getCurrentDateKey();
-    
-    // Mostrar eventos si existen
     if (events[dateKey]) {
         labs.forEach(lab => {
             if (!events[dateKey][lab]) return;
-            
-            // Recolectar y ordenar eventos por hora de inicio para apilarlos correctamente
-            const labEvents = Object.values(events[dateKey][lab]);
-            labEvents.sort((a, b) => {
-                const aStart = a.startHour * 60 + (a.startMinute || 0);
-                const bStart = b.startHour * 60 + (b.startMinute || 0);
-                return aStart - bStart;
-            });
-            
+            const labEvents = Object.values(events[dateKey][lab])
+                .sort((a, b) => (a.startHour * 60 + a.startMinute) - (b.startHour * 60 + b.startMinute));
+
             labEvents.forEach(event => {
-                const startHour = event.startHour;
-                const startMinute = event.startMinute || 0;
-                
-                const startCell = document.querySelector(`td[data-lab="${lab}"][data-hour="${startHour}"][data-half="${startMinute === 30 ? 30 : 0}"]`);
-                
-                if (startCell) {
-                    const startMinutes = startHour * 60 + startMinute;
-                    const endMinutes = event.endHour * 60 + (event.endMinute || 0);
-                    const durationSlots = Math.ceil((endMinutes - startMinutes) / 30);
-                    
-                    // Calcular cuántos eventos ya hay en esta celda
-                    const existingBlocks = startCell.querySelectorAll('.event-block');
-                    const blockIndex = existingBlocks.length;
-                    
-                    const block = document.createElement("div");
-                    block.className = "event-block";
-                    block.style.backgroundColor = event.color || colors[labs.indexOf(lab)];
-                    block.style.height = `calc(${durationSlots * 100}% - 2px)`;
-                    block.style.top = '0px';
-                    
-                    // Apilar horizontalmente si hay múltiples eventos
-                    if (existingBlocks.length > 0) {
-                        const totalBlocks = existingBlocks.length + 1;
-                        const blockWidth = 100 / totalBlocks;
-                        block.style.width = `calc(${blockWidth}% - 4px)`;
-                        block.style.left = `${blockIndex * blockWidth}%`;
-                        block.style.right = 'auto';
-                        
-                        // Reajustar eventos existentes
-                        existingBlocks.forEach((existingBlock, idx) => {
-                            existingBlock.style.width = `calc(${blockWidth}% - 4px)`;
-                            existingBlock.style.left = `${idx * blockWidth}%`;
-                            existingBlock.style.right = 'auto';
-                        });
-                    } else {
-                        block.style.width = `calc(100% - 4px)`;
-                        block.style.left = '2px';
-                        block.style.right = '2px';
-                    }
-                    
-                    block.dataset.eventId = event.id;
-                    block.dataset.lab = lab;
-                    block.dataset.dateKey = dateKey;
-                    
-                    const titleDiv = document.createElement("div");
-                    titleDiv.className = "event-title";
-                    titleDiv.textContent = event.title;
-                    block.appendChild(titleDiv);
-                    
-                    const timeDiv = document.createElement("div");
-                    timeDiv.className = "event-time";
-                    timeDiv.textContent = `${startHour}:${startMinute.toString().padStart(2,'0')} - ${event.endHour}:${(event.endMinute || 0).toString().padStart(2,'0')}`;
-                    block.appendChild(timeDiv);
-                    
-                    const controls = document.createElement("div");
-                    controls.className = "edit-controls";
-                    
-                    const editBtn = document.createElement("button");
-                    editBtn.className = "edit-btn";
-                    editBtn.innerHTML = "✏️";
-                    editBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        editEvent(dateKey, lab, event.id);
-                    };
-                    
-                    const timeBtn = document.createElement("button");
-                    timeBtn.className = "time-btn";
-                    timeBtn.innerHTML = "⏱️";
-                    timeBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        adjustEventTime(dateKey, lab, event.id, event);
-                    };
-                    
-                    const deleteBtn = document.createElement("button");
-                    deleteBtn.className = "delete-btn";
-                    deleteBtn.innerHTML = "🗑️";
-                    deleteBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        deleteEvent(dateKey, lab, event.id);
-                    };
-                    
-                    controls.appendChild(editBtn);
-                    controls.appendChild(timeBtn);
-                    controls.appendChild(deleteBtn);
-                    block.appendChild(controls);
-                    
-                    startCell.appendChild(block);
+                const sH = event.startHour, sM = event.startMinute || 0;
+                const eH = event.endHour,   eM = event.endMinute   || 0;
+                const startCell = document.querySelector(`td[data-lab="${lab}"][data-hour="${sH}"][data-half="${sM === 30 ? 30 : 0}"]`);
+                if (!startCell) return;
+
+                const durationSlots = Math.ceil(((eH * 60 + eM) - (sH * 60 + sM)) / 30);
+                const existing      = startCell.querySelectorAll('.event-block');
+                const blockIdx      = existing.length;
+
+                const block = document.createElement("div");
+                block.className = "event-block";
+                block.style.backgroundColor = event.color || colors[labs.indexOf(lab)];
+                block.style.height = `calc(${durationSlots * 100}% - 2px)`;
+                block.style.top    = '0px';
+
+                if (existing.length > 0) {
+                    const total = existing.length + 1;
+                    const w = 100 / total;
+                    block.style.width = `calc(${w}% - 4px)`;
+                    block.style.left  = `${blockIdx * w}%`;
+                    existing.forEach((eb, idx) => {
+                        eb.style.width = `calc(${w}% - 4px)`;
+                        eb.style.left  = `${idx * w}%`;
+                    });
+                } else {
+                    block.style.width = 'calc(100% - 4px)';
+                    block.style.left  = '2px';
                 }
+
+                block.dataset.eventId  = event.id;
+                block.dataset.lab      = lab;
+                block.dataset.dateKey  = dateKey;
+
+                const titleDiv = document.createElement("div");
+                titleDiv.className   = "event-title";
+                titleDiv.textContent = event.title;
+
+                const timeDiv = document.createElement("div");
+                timeDiv.className   = "event-time";
+                timeDiv.textContent = `${sH}:${String(sM).padStart(2,'0')} - ${eH}:${String(eM).padStart(2,'0')}`;
+
+                const controls = document.createElement("div");
+                controls.className = "edit-controls";
+
+                const editBtn = document.createElement("button");
+                editBtn.className = "edit-btn"; editBtn.innerHTML = "✏️";
+                editBtn.onclick = e => { e.stopPropagation(); editEvent(dateKey, lab, event.id); };
+
+                const timeBtn = document.createElement("button");
+                timeBtn.className = "time-btn"; timeBtn.innerHTML = "⏱️";
+                timeBtn.onclick = e => { e.stopPropagation(); adjustEventTime(dateKey, lab, event.id, event); };
+
+                const delBtn = document.createElement("button");
+                delBtn.className = "delete-btn"; delBtn.innerHTML = "🗑️";
+                delBtn.onclick = e => { e.stopPropagation(); deleteEvent(dateKey, lab, event.id); };
+
+                controls.append(editBtn, timeBtn, delBtn);
+                block.append(titleDiv, timeDiv, controls);
+                startCell.appendChild(block);
             });
         });
     }
 
     initializeDragAndDrop();
-    
-    // Bloquear fin de semana con cartel gigante
+
+    // Overlay fin de semana
     const container = document.getElementById("calendarContainer");
-    const oldOverlay = container.querySelector(".weekend-overlay");
-    
+    const old = container.querySelector(".weekend-overlay");
     if (isWeekend(currentDate)) {
-        if (oldOverlay) oldOverlay.remove();
-        const overlay = document.createElement("div");
-        overlay.className = "weekend-overlay";
-        overlay.innerText = getWeekendText(currentDate);
-        container.style.position = "relative";
-        container.appendChild(overlay);
-    } else {
-        if (oldOverlay) oldOverlay.remove();
+        if (old) old.remove();
+        const ov = document.createElement("div");
+        ov.className = "weekend-overlay";
+        ov.innerText = getWeekendText(currentDate);
+        container.appendChild(ov);
+    } else if (old) {
+        old.remove();
     }
 }
+
+// ======================== DRAG & DROP ========================
 function initializeDragAndDrop() {
+    if (dndInitialized) return; // Solo inicializar una vez (interact usa selector dinámico)
+    dndInitialized = true;
     interact('.event-block').draggable({
         inertia: true,
-        modifiers: [
-            interact.modifiers.restrictRect({
-                restriction: '#calendarContainer',
-                endOnly: true
-            })
-        ],
+        modifiers: [ interact.modifiers.restrictRect({ restriction: '#calendarContainer', endOnly: true }) ],
         autoScroll: true,
         listeners: {
             start(event) {
                 draggedEvent = event.target;
-                draggedEvent.style.opacity = '0.8';
-                draggedEvent.style.zIndex = '1000';
+                draggedEvent.style.opacity = '0.75';
+                draggedEvent.style.zIndex  = '1000';
             },
             move(event) {
-                const target = event.target;
-                const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
-                const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
-                
-                target.style.transform = `translate(${x}px, ${y}px)`;
-                target.setAttribute('data-x', x);
-                target.setAttribute('data-y', y);
+                const t = event.target;
+                const x = (parseFloat(t.getAttribute('data-x')) || 0) + event.dx;
+                const y = (parseFloat(t.getAttribute('data-y')) || 0) + event.dy;
+                t.style.transform = `translate(${x}px, ${y}px)`;
+                t.setAttribute('data-x', x);
+                t.setAttribute('data-y', y);
             },
             end(event) {
-                const target = event.target;
-                target.style.opacity = '1';
-                target.style.zIndex = '5';
-                
-                const rect = target.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                
-                const cell = document.elementFromPoint(centerX, centerY);
-                
+                const t    = event.target;
+                t.style.opacity  = '1';
+                t.style.zIndex   = '5';
+                const rect = t.getBoundingClientRect();
+                const cell = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
                 if (cell && cell.tagName === 'TD' && cell.dataset.lab && cell.dataset.hour) {
-                    moveEvent(target, cell);
+                    moveEvent(t, cell);
+                } else {
+                    renderDayView();
                 }
-                
-                target.style.transform = '';
-                target.setAttribute('data-x', 0);
-                target.setAttribute('data-y', 0);
-                
+                t.style.transform = '';
+                t.setAttribute('data-x', 0);
+                t.setAttribute('data-y', 0);
                 draggedEvent = null;
             }
         }
     });
 }
 
+// ======================== RENDERIZADO VISTA SEMANAL ========================
 function renderWeekView() {
-    if (weekCalendar) {
-        weekCalendar.destroy();
-    }
-    
+    if (weekCalendar) weekCalendar.destroy();
+
     const fcEvents = [];
-    
     const startOfWeek = new Date(currentDate);
-    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay() + 1);
+    startOfWeek.setDate(currentDate.getDate() - ((currentDate.getDay() || 7) - 1));
     startOfWeek.setHours(0, 0, 0, 0);
-    
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 7);
-    endOfWeek.setHours(23, 59, 59, 999);
-    
-    for (let date in events) {
-        const eventDate = new Date(date + 'T12:00:00');
-        if (eventDate >= startOfWeek && eventDate <= endOfWeek) {
-            for (let lab in events[date]) {
-                for (let eventId in events[date][lab]) {
-                    const event = events[date][lab][eventId];
-                    
-                    const start = `${date}T${event.startHour.toString().padStart(2, '0')}:${(event.startMinute || 0).toString().padStart(2, '0')}:00`;
-                    const end = `${date}T${event.endHour.toString().padStart(2, '0')}:${(event.endMinute || 0).toString().padStart(2, '0')}:00`;
-                    
-                    fcEvents.push({
-                        id: event.id,
-                        title: `[${lab}] ${event.title}`,
-                        start: start,
-                        end: end,
-                        color: event.color || colors[labs.indexOf(lab)],
-                        extendedProps: {
-                            lab: lab,
-                            date: date,
-                            eventId: event.id
-                        }
-                    });
-                }
+
+    for (const date in events) {
+        const evDate = new Date(date + 'T12:00:00');
+        if (evDate < startOfWeek || evDate >= endOfWeek) continue;
+        for (const lab in events[date]) {
+            for (const id in events[date][lab]) {
+                const ev = events[date][lab][id];
+                fcEvents.push({
+                    id:    ev.id,
+                    title: `[${lab}] ${ev.title}`,
+                    start: `${date}T${String(ev.startHour).padStart(2,'0')}:${String(ev.startMinute||0).padStart(2,'0')}:00`,
+                    end:   `${date}T${String(ev.endHour).padStart(2,'0')}:${String(ev.endMinute||0).padStart(2,'0')}:00`,
+                    color: ev.color,
+                    extendedProps: { lab, date, eventId: ev.id }
+                });
             }
         }
     }
-    
-    weekCalendar = new FullCalendar.Calendar(weekCalendarEl, {
+
+    weekCalendar = new FullCalendar.Calendar(document.getElementById("weekCalendar"), {
         locale: 'es',
         initialView: 'timeGridWeek',
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek'
-        },
+        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek' },
         events: fcEvents,
         height: '100%',
         slotMinTime: '08:00:00',
@@ -1854,386 +1116,364 @@ function renderWeekView() {
         slotDuration: '00:30:00',
         firstDay: 1,
         eventClick: function(info) {
-            const lab = info.event.extendedProps.lab;
-            const date = info.event.extendedProps.date;
+            const lab     = info.event.extendedProps.lab;
+            const date    = info.event.extendedProps.date;
             const eventId = info.event.extendedProps.eventId;
-            
-            const action = prompt("1: Editar título\n2: Ajustar horario\n3: Eliminar\n0: Cancelar");
-            
+            const action  = prompt("¿Qué hacer?\n1 → Editar título\n2 → Ajustar horario\n3 → Eliminar\n0 → Cancelar");
             if (action === "1") {
-                if (events[date] && events[date][lab] && events[date][lab][eventId]) {
-                    const newTitle = prompt("Nuevo título:", events[date][lab][eventId].title);
-                    if (newTitle) {
-                        events[date][lab][eventId].title = newTitle;
-                        saveEventsToFirebase(events);
-                        renderWeekView();
-                        renderDayView();
-                        if (monthCalendar) monthCalendar.refetchEvents();
-                    }
-                }
+                editEvent(date, lab, eventId);
             } else if (action === "2") {
-                if (events[date] && events[date][lab] && events[date][lab][eventId]) {
-                    const event = events[date][lab][eventId];
-                    const newStart = prompt("Nueva hora de inicio (ej: 9:30):", `${event.startHour}:${(event.startMinute || 0).toString().padStart(2,'0')}`);
-                    const newEnd = prompt("Nueva hora de fin (ej: 12:30):", `${event.endHour}:${(event.endMinute || 0).toString().padStart(2,'0')}`);
-                    
-                    if (newStart && newEnd) {
-                        const [startH, startM] = newStart.split(':').map(Number);
-                        const [endH, endM] = newEnd.split(':').map(Number);
-                        
-                        if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
-                            events[date][lab][eventId].startHour = startH;
-                            events[date][lab][eventId].startMinute = startM || 0;
-                            events[date][lab][eventId].endHour = endH;
-                            events[date][lab][eventId].endMinute = endM || 0;
-                            
-                            saveEventsToFirebase(events);
-                            renderWeekView();
-                            renderDayView();
-                            if (monthCalendar) monthCalendar.refetchEvents();
-                        }
-                    }
-                }
+                const ev = events[date]?.[lab]?.[eventId];
+                if (ev) adjustEventTime(date, lab, eventId, ev);
             } else if (action === "3") {
-                if (confirm("¿Eliminar este bloque?")) {
-                    delete events[date][lab][eventId];
-                    
-                    if (Object.keys(events[date][lab]).length === 0) {
-                        delete events[date][lab];
-                    }
-                    if (Object.keys(events[date]).length === 0) {
-                        delete events[date];
-                    }
-                    
-                    saveEventsToFirebase(events);
-                    renderWeekView();
-                    renderDayView();
-                    if (monthCalendar) monthCalendar.refetchEvents();
-                }
+                deleteEvent(date, lab, eventId);
             }
         },
         dateClick: function(info) {
             if (!rangeModeActive) {
-                const clickedDate = info.date;
-                const hour = clickedDate.getHours();
-                const minute = clickedDate.getMinutes();
-                
                 const lab = prompt("¿En qué laboratorio?\n" + labs.join(', '), "SUM");
-                
                 if (lab && labs.includes(lab)) {
-                    const dateKey = clickedDate.toISOString().split('T')[0];
-                    const title = prompt(`Nuevo evento en ${lab} - ${hour}:${minute.toString().padStart(2,'0')}`, "");
-                    
-                    if (title) {
-                        const eventId = generateEventId();
-                        
-                        if (!events[dateKey]) events[dateKey] = {};
-                        if (!events[dateKey][lab]) events[dateKey][lab] = {};
-                        
-                        let endHour = hour;
-                        let endMinute = minute + 60;
-                        if (endMinute >= 60) {
-                            endHour += 1;
-                            endMinute -= 60;
-                        }
-                        
-                        events[dateKey][lab][eventId] = {
-                            id: eventId,
-                            title: title,
-                            startHour: hour,
-                            startMinute: minute,
-                            endHour: endHour,
-                            endMinute: endMinute,
-                            color: colors[labs.indexOf(lab)]
-                        };
-                        
-                        saveEventsToFirebase(events);
-                        renderWeekView();
-                        renderDayView();
-                        if (monthCalendar) monthCalendar.refetchEvents();
-                    }
+                    const date   = getLocalDateKey(info.date);
+                    const h      = info.date.getHours();
+                    const m      = info.date.getMinutes();
+                    const title  = prompt(`Nuevo evento en ${lab} — ${h}:${String(m).padStart(2,'0')}`, "");
+                    if (!title) return;
+                    let endH = h, endM = m + 60;
+                    if (endM >= 60) { endH++; endM -= 60; }
+                    if (hasOverlap(date, lab, h, m, endH, endM)) { alert("❌ Horario ya ocupado."); return; }
+                    agregarReserva(date, lab, title, h, m, endH, endM, colors[labs.indexOf(lab)]);
                 }
             }
         }
     });
-    
     weekCalendar.render();
 }
 
+// ======================== MODAL MENSUAL POR LABORATORIO ========================
 function openModalLab(lab) {
-    modal.style.display = "flex";
-    modalTitle.textContent = `Calendario Mensual - ${lab}`;
-    monthCalendarEl.innerHTML = "";
-    
-    const calendarEl = document.createElement("div");
-    calendarEl.style.height = "100%";
-    calendarEl.style.width = "100%";
-    monthCalendarEl.appendChild(calendarEl);
+    const modal = document.getElementById("modal");
+    document.getElementById("modalTitle").textContent = `📅 Calendario Mensual — ${lab}`;
+    document.getElementById("monthCalendar").innerHTML = "";
 
-    const fcEvents = [];
-    
-    for (let date in events) {
-        if (events[date] && events[date][lab]) {
-            for (let eventId in events[date][lab]) {
-                const event = events[date][lab][eventId];
-                
-                const start = `${date}T${event.startHour.toString().padStart(2, '0')}:${(event.startMinute || 0).toString().padStart(2, '0')}:00`;
-                const end = `${date}T${event.endHour.toString().padStart(2, '0')}:${(event.endMinute || 0).toString().padStart(2, '0')}:00`;
-                
-                fcEvents.push({
-                    id: event.id,
-                    title: event.title,
-                    start: start,
-                    end: end,
-                    color: event.color || colors[labs.indexOf(lab)],
-                    allDay: false,
-                    extendedProps: {
-                        lab: lab,
-                        date: date,
-                        eventId: event.id
-                    }
-                });
-            }
-        }
-    }
+    if (monthCalendar) { monthCalendar.destroy(); monthCalendar = null; }
 
-    if (monthCalendar) {
-        monthCalendar.destroy();
-    }
-    
-    monthCalendar = new FullCalendar.Calendar(calendarEl, {
+    const calEl = document.createElement("div");
+    calEl.style.cssText = "height:100%;width:100%;";
+    document.getElementById("monthCalendar").appendChild(calEl);
+
+    monthCalendar = new FullCalendar.Calendar(calEl, {
         locale: 'es',
         initialView: 'dayGridMonth',
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay'
-        },
-        events: fcEvents,
+        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
         height: '100%',
         slotDuration: '00:30:00',
+        events: function(fetchInfo, successCallback) {
+            const fcEvents = [];
+            for (const date in events) {
+                if (!events[date][lab]) continue;
+                for (const evId in events[date][lab]) {
+                    const ev = events[date][lab][evId];
+                    fcEvents.push({
+                        id:    ev.id,
+                        title: ev.title,
+                        start: `${date}T${String(ev.startHour).padStart(2,'0')}:${String(ev.startMinute||0).padStart(2,'0')}:00`,
+                        end:   `${date}T${String(ev.endHour).padStart(2,'0')}:${String(ev.endMinute||0).padStart(2,'0')}:00`,
+                        color: ev.color || colors[labs.indexOf(lab)],
+                        extendedProps: { lab, date, eventId: ev.id }
+                    });
+                }
+            }
+            successCallback(fcEvents);
+        },
         eventClick: function(info) {
-            const lab = info.event.extendedProps.lab;
-            const date = info.event.extendedProps.date;
+            const lab2    = info.event.extendedProps.lab;
+            const date    = info.event.extendedProps.date;
             const eventId = info.event.extendedProps.eventId;
-            
-            const action = prompt("1: Editar título\n2: Ajustar horario\n3: Eliminar\n0: Cancelar");
-            
+            const action  = prompt("¿Qué hacer?\n1 → Editar título\n2 → Ajustar horario\n3 → Eliminar\n0 → Cancelar");
             if (action === "1") {
-                const newTitle = prompt("Nuevo título:", info.event.title);
-                if (newTitle && events[date] && events[date][lab] && events[date][lab][eventId]) {
-                    events[date][lab][eventId].title = newTitle;
-                    saveEventsToFirebase(events);
-                    monthCalendar.refetchEvents();
-                    renderDayView();
-                    if (weekCalendar) renderWeekView();
-                }
+                editEvent(date, lab2, eventId);
             } else if (action === "2") {
-                if (events[date] && events[date][lab] && events[date][lab][eventId]) {
-                    const event = events[date][lab][eventId];
-                    const newStart = prompt("Nueva hora de inicio (ej: 9:30):", `${event.startHour}:${(event.startMinute || 0).toString().padStart(2,'0')}`);
-                    const newEnd = prompt("Nueva hora de fin (ej: 12:30):", `${event.endHour}:${(event.endMinute || 0).toString().padStart(2,'0')}`);
-                    
-                    if (newStart && newEnd) {
-                        const [startH, startM] = newStart.split(':').map(Number);
-                        const [endH, endM] = newEnd.split(':').map(Number);
-                        
-                        if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
-                            events[date][lab][eventId].startHour = startH;
-                            events[date][lab][eventId].startMinute = startM || 0;
-                            events[date][lab][eventId].endHour = endH;
-                            events[date][lab][eventId].endMinute = endM || 0;
-                            
-                            saveEventsToFirebase(events);
-                            monthCalendar.refetchEvents();
-                            renderDayView();
-                            if (weekCalendar) renderWeekView();
-                        }
-                    }
-                }
+                const ev = events[date]?.[lab2]?.[eventId];
+                if (ev) adjustEventTime(date, lab2, eventId, ev);
             } else if (action === "3") {
-                if (confirm("¿Eliminar este bloque?")) {
-                    delete events[date][lab][eventId];
-                    
-                    if (Object.keys(events[date][lab]).length === 0) {
-                        delete events[date][lab];
-                    }
-                    if (Object.keys(events[date]).length === 0) {
-                        delete events[date];
-                    }
-                    
-                    saveEventsToFirebase(events);
-                    monthCalendar.refetchEvents();
-                    renderDayView();
-                    if (weekCalendar) renderWeekView();
-                }
+                deleteEvent(date, lab2, eventId);
             }
         }
     });
-    
     monthCalendar.render();
+    modal.classList.add('visible');
 }
 
-// --- SIDEBAR ---
-labs.forEach((lab, i) => {
-    const div = document.createElement("div");
-    div.className = "lab";
-    div.style.backgroundColor = colors[i];
-    div.style.color = "#FFFFFF";
-    div.textContent = lab;
-    
-    div.addEventListener("mouseenter", (e) => {
-        showLabTooltip(lab, e);
-    });
-    div.addEventListener("mouseleave", hideLabTooltip);
-    div.addEventListener("mousemove", (e) => {
-    showLabTooltip(lab, e);
-});
-    
-    div.addEventListener("click", () => {
-        openModalLab(lab);
-    });
-    
-    labList.appendChild(div);
-});
-
-// --- EVENT LISTENERS ---
-closeModal.addEventListener("click", () => {
-    modal.style.display = "none";
-});
-
-closeHorariosModal.addEventListener("click", () => {
-    horariosModal.style.display = "none";
-});
-
-btnHorarios.addEventListener("click", () => {
-    showTeacherSchedule();
-});
-
-viewButtons.forEach(btn => {
-    btn.addEventListener("click", () => {
-        viewButtons.forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        currentView = btn.dataset.view;
-        
-        if (currentView === 'diario') {
-            dayViewContainer.style.display = 'block';
-            weekViewContainer.style.display = 'none';
-            renderDayView();
-            initializeDragAndDrop();
-        } else {
-            dayViewContainer.style.display = 'none';
-            weekViewContainer.style.display = 'block';
-            renderWeekView();
+// ======================== TOOLTIP DE LABORATORIO ========================
+function getLabSchedule(labName) {
+    const dias = ["Lunes","Martes","Miércoles","Jueves","Viernes"];
+    const turnos = ["Mañana (9–13)","Tarde (14-17)","Noche (18–21)"];
+    let gridName = labName;
+    if (labName === "RA")     gridName = "RA/3D";
+    if (labName === "HYS 2")  gridName = "HYS";
+    if (labName === "TRANSPORTE") return [];
+    const schedule = [];
+    dias.forEach(dia => {
+        turnos.forEach(turno => {
+            const t = teacherSchedule[dia]?.[turno]?.[gridName];
+            if (t && t.trim() && t !== "vacante") schedule.push(`${dia} ${turno}: ${t}`);
+        });
+        if (labName === "SUM") {
+            const t = teacherSchedule[dia]?.["SUM (17 a 21)"]?.["SUM"];
+            if (t && t.trim()) schedule.push(`${dia} SUM (17-21): ${t}`);
         }
     });
-});
+    return schedule;
+}
 
-window.addEventListener("click", (e) => {
-    if (e.target === modal) {
-        modal.style.display = "none";
+function showLabTooltip(labName, event) {
+    const info = labInfo[labName];
+    if (!info) return;
+    const sched = getLabSchedule(labName);
+    let schedHtml = '';
+    if (sched.length > 0) {
+        schedHtml = '<div class="teacher-schedule-mini"><span class="tooltip-label">📅 Horarios:</span><ul style="margin:5px 0 0 12px;">';
+        sched.forEach(s => schedHtml += `<li>${s}</li>`);
+        schedHtml += '</ul></div>';
     }
-    if (e.target === horariosModal) {
-        horariosModal.style.display = "none";
-    }
-});
+    const tt = document.getElementById("labTooltip");
+    tt.innerHTML = `
+        <h4>${labName}</h4>
+        <p><span class="tooltip-label">📍 Piso:</span> ${info.piso}</p>
+        <p><span class="tooltip-label">📝 Desc.:</span> ${info.descripcion}</p>
+        <p><span class="tooltip-label">👥 Cap.:</span> ${info.capacidad} puestos</p>
+        <p><span class="tooltip-label">💻 Obs.:</span> ${info.observaciones}</p>
+        ${schedHtml}`;
+    tt.style.display = 'block';
+    let left = event.pageX + 15, top = event.pageY - 50;
+    const rect = tt.getBoundingClientRect();
+    if (left + rect.width  > window.innerWidth  - 10) left = event.pageX - rect.width - 15;
+    if (top  + rect.height > window.innerHeight - 10) top  = event.pageY - rect.height - 10;
+    if (left < 10) left = 10;
+    if (top  < 10) top  = 10;
+    tt.style.left = left + 'px';
+    tt.style.top  = top  + 'px';
+}
+function hideLabTooltip() { document.getElementById("labTooltip").style.display = 'none'; }
 
-prevDay.addEventListener("click", () => {
-    if (currentView === 'diario') {
-        currentDate.setDate(currentDate.getDate() - 1);
-    } else {
-        currentDate.setDate(currentDate.getDate() - 7);
+// ======================== HORARIOS DE PROFESORES ========================
+function showTeacherSchedule() {
+    const dias   = ["Lunes","Martes","Miércoles","Jueves","Viernes"];
+    const turnos = ["Mañana (9–13)","Tarde (14-17)","Noche (18–21)","SUM (17 a 21)"];
+    let html = '<table class="teacher-grid"><tr><th>Día</th><th>Turno</th><th>Sustentabilidad</th><th>HyS</th><th>IA</th><th>Logística</th><th>Energías</th><th>Finanzas</th><th>RA/3D</th><th>Robótica</th><th>SUM</th></tr>';
+    dias.forEach(dia => {
+        let first = true;
+        turnos.forEach(turno => {
+            if (!teacherSchedule[dia]?.[turno]) return;
+            const t = teacherSchedule[dia][turno];
+            const isSum = turno.includes('SUM');
+            html += `<tr>
+                ${first ? `<td rowspan="4" class="day-header">${dia}</td>` : ''}
+                <td class="turno ${isSum ? 'sum-row' : ''}">${turno}</td>
+                <td>${t["SUSTENTABILIDAD"]||''}</td><td>${t["HYS"]||''}</td>
+                <td>${t["IA"]||''}</td><td>${t["LOGÍSTICA"]||''}</td>
+                <td>${t["ENERGÍA"]||''}</td><td>${t["FINANZAS"]||''}</td>
+                <td>${t["RA/3D"]||''}</td><td>${t["ROBÓTICA"]||''}</td>
+                <td>${t["SUM"]||''}</td></tr>`;
+            first = false;
+        });
+    });
+    html += '</table>';
+    document.getElementById("horariosGridContainer").innerHTML = html;
+    document.getElementById("horariosModal").classList.add('visible');
+}
+
+// ======================== SELECCIÓN DE RANGO ========================
+function handleMouseDown(e) {
+    if (!rangeModeActive) return;
+    e.preventDefault();
+    const td = e.currentTarget;
+    selectedLab    = td.dataset.lab;
+    selectionStart = { hour: parseInt(td.dataset.hour), half: parseInt(td.dataset.half) };
+    selectionEnd   = { ...selectionStart };
+    clearSelection();
+    td.classList.add('selected');
+}
+
+function handleMouseEnter(e) {
+    if (!rangeModeActive || selectionStart.hour === null) return;
+    const td = e.currentTarget;
+    if (td.dataset.lab !== selectedLab) return;
+    selectionEnd = { hour: parseInt(td.dataset.hour), half: parseInt(td.dataset.half) };
+    clearSelection();
+    const minM = Math.min(selectionStart.hour * 60 + selectionStart.half, selectionEnd.hour * 60 + selectionEnd.half);
+    const maxM = Math.max(selectionStart.hour * 60 + selectionStart.half, selectionEnd.hour * 60 + selectionEnd.half);
+    for (let h = 8; h <= 21; h++) {
+        for (const half of [0, 30]) {
+            const curr = h * 60 + half;
+            if (curr >= minM && curr <= maxM) {
+                const cell = document.querySelector(`td[data-lab="${selectedLab}"][data-hour="${h}"][data-half="${half}"]`);
+                if (cell) cell.classList.add('selecting');
+            }
+        }
     }
+}
+
+function handleMouseUp(e) {
+    if (!rangeModeActive || selectionStart.hour === null) return;
+    const td = e.currentTarget;
+    if (td.dataset.lab !== selectedLab) { cancelRangeSelection(); return; }
+
+    const startM = selectionStart.hour * 60 + selectionStart.half;
+    const endM   = selectionEnd.hour   * 60 + selectionEnd.half + 30;
+    const minM   = Math.min(startM, endM);
+    const maxM   = Math.max(startM, endM);
+    const sh = Math.floor(minM / 60), sm = minM % 60;
+    const eh = Math.floor(maxM / 60), em = maxM % 60;
+
+    createRangeEvent(selectedLab, sh, sm, eh, em, maxM - minM);
+    cancelRangeSelection();
+}
+
+function clearSelection() {
+    document.querySelectorAll('#calendarTable td.selected, #calendarTable td.selecting')
+        .forEach(td => td.classList.remove('selected', 'selecting'));
+}
+function cancelRangeSelection() {
+    selectionStart = { hour: null, half: null };
+    selectionEnd   = { hour: null, half: null };
+    selectedLab    = null;
+    clearSelection();
+}
+
+// ======================== NAVEGACIÓN DE FECHAS ========================
+function updateDateDisplay() {
+    document.getElementById("currentDateDisplay").textContent = formatDateLocal(currentDate);
+    document.getElementById("datePicker").value = getLocalDateKey(currentDate);
+    if (currentView === 'diario') renderDayView();
+    else renderWeekView();
+}
+
+// ======================== SIDEBAR – LISTA DE LABS ========================
+function buildSidebar() {
+    const labList = document.getElementById("labList");
+    labList.innerHTML = '';
+    labs.forEach((lab, i) => {
+        const div = document.createElement("div");
+        div.className = "lab";
+        div.style.backgroundColor = colors[i];
+        div.style.color = "#FFFFFF";
+        div.textContent = lab;
+        div.addEventListener("mouseenter", e => showLabTooltip(lab, e));
+        div.addEventListener("mouseleave", hideLabTooltip);
+        div.addEventListener("mousemove",  e => showLabTooltip(lab, e));
+        div.addEventListener("click",      () => openModalLab(lab));
+        labList.appendChild(div);
+    });
+}
+
+// ======================== EVENT LISTENERS ========================
+document.getElementById('prevDay').onclick = () => {
+    currentDate.setDate(currentDate.getDate() - (currentView === 'diario' ? 1 : 7));
     updateDateDisplay();
-});
-
-nextDay.addEventListener("click", () => {
-    if (currentView === 'diario') {
-        currentDate.setDate(currentDate.getDate() + 1);
-    } else {
-        currentDate.setDate(currentDate.getDate() + 7);
-    }
+};
+document.getElementById('nextDay').onclick = () => {
+    currentDate.setDate(currentDate.getDate() + (currentView === 'diario' ? 1 : 7));
     updateDateDisplay();
-});
-
-datePicker.addEventListener("change", (e) => {
+};
+document.getElementById('btnHoy').onclick = () => { currentDate = new Date(); updateDateDisplay(); };
+document.getElementById('datePicker').onchange = e => {
     currentDate = new Date(e.target.value + 'T12:00:00');
     updateDateDisplay();
+};
+document.querySelectorAll("[data-view]").forEach(btn => {
+    btn.onclick = () => {
+        document.querySelectorAll("[data-view]").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentView = btn.dataset.view;
+        const isDiario = currentView === 'diario';
+        document.getElementById("dayViewContainer").style.display  = isDiario ? 'flex' : 'none';
+        document.getElementById("weekViewContainer").style.display = isDiario ? 'none' : 'block';
+        if (isDiario) renderDayView();
+        else renderWeekView();
+    };
+});
+document.getElementById('rangeModeBtn').onclick = () => {
+    rangeModeActive = !rangeModeActive;
+    document.getElementById('rangeModeBtn').classList.toggle('active', rangeModeActive);
+    document.getElementById('selectionInfo').classList.toggle('active', rangeModeActive);
+    if (!rangeModeActive) cancelRangeSelection();
+};
+document.getElementById('cancelSelection').onclick = () => {
+    rangeModeActive = false;
+    document.getElementById('rangeModeBtn').classList.remove('active');
+    document.getElementById('selectionInfo').classList.remove('active');
+    cancelRangeSelection();
+};
+document.getElementById('btnLimpiar').onclick  = clearDay;
+document.getElementById('btnHorarios').onclick = showTeacherSchedule;
+document.getElementById('closeModal').onclick        = () => document.getElementById('modal').classList.remove('visible');
+document.getElementById('closeHorariosModal').onclick = () => document.getElementById('horariosModal').classList.remove('visible');
+
+// Cerrar modales al hacer click fuera
+['modal','horariosModal','adminModal'].forEach(id => {
+    document.getElementById(id).addEventListener('click', e => {
+        if (e.target.id === id) document.getElementById(id).classList.remove('visible');
+    });
 });
 
-btnHoy.addEventListener("click", () => {
-    currentDate = new Date();
-    updateDateDisplay();
-});
-
-// --- INICIAR LA APLICACIÓN ---
-async function initializeApp() {
-    events = await loadEventsFromFirebase();
-    
-    if (Object.keys(events).length === 0) {
-        const today = new Date();
-        const currentYear = today.getFullYear();
-        const currentMonth = today.getMonth();
-        
-        for (let day = 1; day <= 28; day++) {
-            const date = new Date(currentYear, currentMonth, day);
-            const dateKey = date.toISOString().split('T')[0];
-            
-            events[dateKey] = {};
-            
-            labs.forEach((lab, index) => {
-                events[dateKey][lab] = {};
-                const startHour = 9 + (index % 5);
-                const eventId = generateEventId();
-                
-                if (day % 2 === 0) {
-                    events[dateKey][lab][eventId] = {
-                        id: eventId,
-                        title: `Clase ${lab}`,
-                        startHour: startHour,
-                        startMinute: 0,
-                        endHour: startHour + 2,
-                        endMinute: 0,
-                        color: colors[index]
-                    };
-                } else {
-                    events[dateKey][lab][eventId] = {
-                        id: eventId,
-                        title: `Taller ${lab}`,
-                        startHour: 14 + (index % 4),
-                        startMinute: 30,
-                        endHour: 14 + (index % 4) + 2,
-                        endMinute: 30,
-                        color: colors[index]
-                    };
-                }
+// ======================== INICIALIZACIÓN (Auth State) ========================
+auth.onAuthStateChanged(async user => {
+    if (user) {
+        currentUser = user;
+        // Verificar/crear documento de usuario en Firestore
+        const userDocRef = db.collection('usuarios').doc(user.uid);
+        const userDoc = await userDocRef.get();
+        if (!userDoc.exists) {
+            // Primer inicio de sesión con Google: crear usuario con rol 'user'
+            await userDocRef.set({
+                email: user.email,
+                nombre: user.displayName || user.email.split('@')[0],
+                rol: 'user',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
         }
-        await saveEventsToFirebase(events);
-    }
-    
-    buildTable();
-    updateDateDisplay();
-    initializeDragAndDrop();
-    
-    setInterval(() => {
-        if (currentView === 'diario') {
-            renderDayView();
-            initializeDragAndDrop();
-        } else {
-            renderWeekView();
-        }
-        if (modal.style.display === 'flex' && monthCalendar) {
-            monthCalendar.refetchEvents();
-        }
-    }, 60000);
-}
+        isAdmin = await checkAdminStatus(user);
 
-initializeApp();
+        // Mostrar UI
+        document.getElementById('loginModal').style.display  = 'none';
+        document.getElementById('sidebar').style.display     = 'flex';
+        document.getElementById('main').style.display        = 'flex';
+        document.getElementById('userEmailDisplay').textContent = user.email;
+        document.getElementById('userRoleDisplay').textContent  = isAdmin ? '⭐ Administrador' : '👤 Usuario';
+        document.getElementById('btnAdminUsers').style.display  = isAdmin ? 'inline-block' : 'none';
+
+        // Construir UI base (solo la primera vez)
+        if (typeof window._uiBuilt === 'undefined') {
+            buildSidebar();
+            buildTable();
+            window._uiBuilt = true;
+        }
+        updateDateDisplay();
+        initializeDragAndDrop();
+
+        // Migración de datos (solo una vez)
+        await migrarDatosAntiguos();
+
+        // Suscripción en tiempo real
+        subscribeToEvents();
+
+    } else {
+        // Cerrar sesión / no autenticado
+        currentUser = null;
+        isAdmin     = false;
+        window._uiBuilt = false;
+        dndInitialized = false;
+        if (unsubscribeEvents) { unsubscribeEvents(); unsubscribeEvents = null; }
+        if (weekCalendar)   { weekCalendar.destroy(); weekCalendar = null; }
+        if (monthCalendar)  { monthCalendar.destroy(); monthCalendar = null; }
+        events = {};
+        document.getElementById('sidebar').style.display    = 'none';
+        document.getElementById('main').style.display       = 'none';
+        document.getElementById('loginModal').style.display = 'flex';
+        document.getElementById('loginError').style.display = 'none';
+    }
+});
 </script>
 </body>
 </html>
-
-
-
-
