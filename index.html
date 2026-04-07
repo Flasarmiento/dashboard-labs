@@ -1442,6 +1442,7 @@ auth.onAuthStateChanged(async user => {
         document.getElementById('userEmailDisplay').textContent = user.email;
         document.getElementById('userRoleDisplay').textContent  = isAdmin ? '⭐ Administrador' : '👤 Usuario';
         document.getElementById('btnAdminUsers').style.display  = isAdmin ? 'inline-block' : 'none';
+        document.getElementById('btnHorarios').style.display = isAdmin ? 'inline-block' : 'none';
 
         // Construir UI base (solo la primera vez)
         if (typeof window._uiBuilt === 'undefined') {
