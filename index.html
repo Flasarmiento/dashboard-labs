@@ -302,7 +302,24 @@ body {
     cursor: pointer; display: flex; align-items: center; justify-content: center;
     backdrop-filter: blur(2px);
 }
-.edit-btn:hover, .delete-btn:hover, .time-btn:hover { background: rgba(0,0,0,0.75);
+.edit-btn:hover, .delete-btn:hover, .time-btn:hover { background: rgba(0,0,0,0.75); }
+
+/* === MODAL GENÉRICO === */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: none;
+    align-items: center; justify-content: center;
+    z-index: 9999; backdrop-filter: blur(3px);
+}
+.modal-overlay.visible { display: flex; }
+.modal-box {
+    background: white; border-radius: 16px; padding: 1.5rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column;
+}
+.modal-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;
+}
+.modal-header h3 { color: #153244; font-size: 1.25rem; margin: 0; }
 
 /* === MODAL GENÉRICO === */
 .modal-overlay {
