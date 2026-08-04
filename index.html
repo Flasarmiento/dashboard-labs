@@ -1215,8 +1215,9 @@ function openModalLab(lab) {
             }
         }
     });
-    monthCalendar.render();
     modal.classList.add('visible');
+    monthCalendar.render();
+    setTimeout(() => monthCalendar.updateSize(), 50);
 }
 
 // ======================== TOOLTIP DE LABORATORIO ========================
