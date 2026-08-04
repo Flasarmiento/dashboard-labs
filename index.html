@@ -278,14 +278,12 @@ body {
     text-align: center; word-break: break-word;
     box-shadow: 0 1px 3px rgba(0,0,0,0.25); z-index: 5;
     border: 1px solid rgba(255,255,255,0.35);
-    overflow: hidden; transition: opacity 0.15s; pointer-events: auto;
+    overflow-y: auto; overflow-x: hidden; transition: opacity 0.15s; pointer-events: auto;
 }
 .event-block .event-title {
     font-weight: bold; font-size: 0.68rem;
     white-space: normal; max-width: 100%; word-break: break-word;
-    line-height: 1.3; max-height: 2.6em;
-    display: -webkit-box; -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical; overflow: hidden;
+    line-height: 1.3;
     flex: 1; margin-bottom: 2px;
 }
 .event-block .event-time {
@@ -304,7 +302,7 @@ body {
     cursor: pointer; display: flex; align-items: center; justify-content: center;
     backdrop-filter: blur(2px);
 }
-.edit-btn:hover, .delete-btn:hover, .time-btn:hover { background: rgba(0,0,0,0.75); }
+.edit-btn:hover, .delete-btn:hover, .time-btn:hover { background: rgba(0,0,0,0.75);
 
 /* === MODAL GENÉRICO === */
 .modal-overlay {
