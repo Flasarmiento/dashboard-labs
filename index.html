@@ -921,6 +921,9 @@ function buildTable() {
     labs.forEach(lab => {
         const th = document.createElement("th");
         th.textContent = (lab === "HYS") ? "RECORRIDAS" : lab;
+        if (th.textContent.length > 10) {
+            th.style.fontSize = "0.58rem";
+        }
         th.addEventListener("mouseenter", e => showLabTooltip(lab, e));
         th.addEventListener("mouseleave", hideLabTooltip);
         th.addEventListener("mousemove",  e => showLabTooltip(lab, e));
