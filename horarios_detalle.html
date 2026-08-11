@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Centro de Simulación · Disponibilidad</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #FAFAF7;
+    --card: #FFFFFF;
+    --card-alt: #F5F4EE;
+    --border: #E8E7E0;
+    --border-strong: #D5D4CC;
+    --text: #1A1918;
+    --text-2: #52514E;
+    --muted: #8B8A83;
+    --accent: #C15F3C;
+    --radius: 8px;
+    --sustentabilidad: #639922;
+    --seguridad: #BA7517;
+    --ia: #378ADD;
+    --logistica: #D85A30;
+    --energias: #1D9E75;
+    --finanzas: #7F77DD;
+    --ra: #D4537E;
+    --robotica: #E24B4A;
+    --coordinacion: #4A6FA5;
+    --administracion: #6B6A64;
+    --referente: #B85450;
+    --fipe: #2A7A55;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .container { max-width: 1440px; margin: 0 auto; padding: 32px 40px 48px; }
+  header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 24px; margin-bottom: 24px;
+  }
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }
+  .subtitle { color: var(--text-2); font-size: 14px; }
+  .breadcrumb { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .section-desc { color: var(--text-2); font-size: 13px; margin-bottom: 16px; }
+
+  .status-msg {
+    padding: 10px 14px; border-radius: 6px; font-size: 13px;
+    margin-bottom: 20px; display: none; align-items: center; gap: 8px;
+  }
+  .status-msg.visible { display: flex; }
+  .status-msg.success { background: #E8F5E9; color: #1F5F26; border: 1px solid #C8E6C9; }
+  .status-msg.error { background: #FDECEC; color: #791F1F; border: 1px solid #F5C6CB; }
+  .status-msg.info { background: #E3F2FD; color: #0C447C; border: 1px solid #BBDEFB; }
+
+  .tabs {
+    display: flex; gap: 4px; border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .tab {
+    padding: 10px 20px; background: transparent; border: none; cursor: pointer;
+    font-family: inherit; font-size: 14px; color: var(--text-2);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: all 0.15s ease; font-weight: 500;
+  }
+  .tab:hover { color: var(--text); background: var(--card-alt); }
+  .tab.active {
+    color: var(--text); border-bottom-color: var(--text);
+  }
+
+  .kpis {
+    display: grid; grid-template-columns: repeat(2, minmax(200px, 320px)); gap: 12px;
+    margin-bottom: 24px;
+  }
+  .kpi {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px;
+  }
+  .kpi-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+  .kpi-value {
+    font-size: 28px; font-weight: 600; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  .kpi-hint { font-size: 12px; color: var(--text-2); margin-top: 6px; }
+
+  .section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 24px; }
+  .section-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+
+  .detail-controls {
+    display: flex; gap: 16px; align-items: center; margin-bottom: 20px;
+    padding: 16px; background: var(--card-alt); border-radius: 6px;
+    flex-wrap: wrap;
+  }
+  .detail-controls label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+  .detail-controls select, .detail-controls input[type=range] {
+    padding: 6px 10px; border: 1px solid var(--border);
+    border-radius: 5px; background: white; font-family: inherit; font-size: 13px;
+    color: var(--text);
+  }
+  .detail-controls input[type=range] { width: 220px; padding: 0; }
+  .detail-hour-label {
+    font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums;
+    min-width: 110px;
+  }
+  .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .detail-card {
+    background: var(--card-alt); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 16px;
+  }
+  .detail-card.empty { opacity: 0.55; }
+  .detail-lab { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px; }
+  .detail-teacher { font-size: 13px; padding: 4px 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; border-bottom: 1px solid var(--border); }
+  .detail-teacher:last-child { border-bottom: none; }
+  .detail-teacher .flags { display: inline-flex; gap: 4px; }
+  .detail-teacher .flag { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(0,0,0,0.06); color: var(--text-2); white-space: nowrap; }
+  .detail-teacher .flag.novcf { background: #FCEBEB; color: #791F1F; }
+  .detail-teacher .flag.pending { background: #FAEEDA; color: #633806; }
+  .detail-teacher .flag.remote { background: #E3F2FD; color: #0C447C; }
+  .detail-teacher .role { color: var(--muted); font-size: 11px; margin-top: 1px; }
+  .detail-teacher-info { display: flex; flex-direction: column; min-width: 0; }
+  .detail-teacher-info .name { line-height: 1.2; }
+  .detail-empty-msg { font-size: 12px; color: var(--muted); font-style: italic; }
+
+  .heatmap-legend {
+    display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); margin-bottom: 16px;
+    padding: 10px 12px; background: var(--card-alt); border-radius: 6px;
+    flex-wrap: wrap;
+  }
+  .legend-scale { display: inline-flex; gap: 3px; align-items: center; }
+  .ls-cell {
+    width: 26px; height: 18px; border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-variant-numeric: tabular-nums;
+  }
+  .ls-cell.zero { background: #F1F0EA; color: var(--muted); }
+  .ls-cell.one { background: rgba(95, 94, 90, 0.28); color: var(--text); }
+  .ls-cell.two { background: rgba(95, 94, 90, 0.58); color: var(--text); }
+  .ls-cell.three { background: rgba(95, 94, 90, 0.9); color: white; }
+  .legend-flag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--text-2);
+  }
+  .legend-flag .sample {
+    display: inline-block; width: 14px; height: 10px; border-radius: 2px;
+  }
+
+  .heatmap-scroll { overflow-x: auto; margin: 0 -24px; padding: 0 24px; }
+  .heatmap {
+    display: grid;
+    grid-template-columns: 220px repeat(65, 20px);
+    gap: 2px;
+    align-items: center;
+    min-width: fit-content;
+  }
+  .lab-name {
+    font-size: 13px; padding: 8px 10px; border-radius: 4px;
+    color: white; font-weight: 500;
+    display: flex; align-items: center;
+    grid-column: 1;
+    line-height: 1.2;
+  }
+  .day-header {
+    font-size: 12px; font-weight: 500; color: var(--text-2);
+    text-align: center; padding: 6px 0 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .hour-header {
+    font-size: 10px; color: var(--muted);
+    text-align: center; padding-bottom: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cell {
+    height: 24px; border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-variant-numeric: tabular-nums;
+    cursor: pointer; transition: transform 0.1s;
+    position: relative;
+  }
+  .cell:hover { transform: scale(1.15); z-index: 10; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+  .cell.zero { background: #F1F0EA; color: transparent; }
+  .cell.zero:hover { background: #E5E4DE; }
+  .cell.pending {
+    background-image: repeating-linear-gradient(
+      45deg, transparent, transparent 2px,
+      rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px
+    );
+  }
+  .cell.first-of-day, .hour-header.first-of-day { margin-left: 8px; }
+  .day-header.first-of-day { margin-left: 8px; }
+
+  .tooltip {
+    position: fixed; pointer-events: none;
+    background: var(--text); color: white;
+    padding: 8px 12px; border-radius: 6px;
+    font-size: 12px; line-height: 1.5;
+    max-width: 280px; z-index: 100;
+    opacity: 0; transition: opacity 0.15s;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+  }
+  .tooltip.visible { opacity: 1; }
+  .tooltip .t-title { font-weight: 600; margin-bottom: 4px; }
+  .tooltip .t-count { color: rgba(255,255,255,0.7); font-size: 11px; margin-bottom: 6px; }
+  .tooltip .t-list { display: flex; flex-direction: column; gap: 3px; }
+  .tooltip .t-empty { color: rgba(255,255,255,0.6); font-style: italic; }
+  .tooltip .t-flag { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(255,255,255,0.2); margin-left: 6px; }
+  .tooltip .t-flag.pending { background: rgba(255,180,80,0.35); }
+  .tooltip .t-flag.novcf { background: rgba(255,90,80,0.35); }
+
+  footer {
+    margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12px; line-height: 1.6;
+  }
+  footer p { margin-bottom: 6px; }
+  footer strong { color: var(--text-2); font-weight: 500; }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  @media (max-width: 900px) {
+    .container { padding: 20px; }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    header { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <div>
+      <div class="breadcrumb">Coordinación pedagógica · Centro de Simulación</div>
+      <h1>Disponibilidad del personal</h1>
+      <div class="subtitle">Vista hora por hora del cuerpo docente y del personal no docente activo.</div>
+    </div>
+  </header>
+
+  <div class="status-msg" id="status-msg"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="docentes">Docentes</button>
+    <button class="tab" data-tab="nodocentes">Personal no docente</button>
+  </div>
+
+  <div class="tab-content active" id="tab-docentes">
+
+    <div class="kpis" id="kpis-docentes"></div>
+
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <h2>Detalle por franja horaria</h2>
+          <div class="section-desc">Seleccioná día y hora para ver quiénes están en cada laboratorio.</div>
+        </div>
+      </div>
+      <div class="detail-controls">
+        <label>
+          Día:
+          <select id="detail-day-doc">
+            <option value="0">Lunes</option>
+            <option value="1">Martes</option>
+            <option value="2" selected>Miércoles</option>
+            <option value="3">Jueves</option>
+            <option value="4">Viernes</option>
+          </select>
+        </label>
+        <label>
+          Hora:
+          <input type="range" id="detail-hour-doc" min="8" max="20" value="14" step="1">
+        </label>
+        <span class="detail-hour-label" id="detail-hour-label-doc">14:00 – 15:00</span>
+      </div>
+      <div class="detail-grid" id="detail-grid-doc"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <h2>Grilla horaria por laboratorio</h2>
+          <div class="section-desc">Cada celda es una hora exacta. El color indica cuántos docentes están disponibles. Pasá el cursor para ver quiénes son.</div>
+        </div>
+      </div>
+      <div class="heatmap-legend">
+        <span>Docentes disponibles:</span>
+        <div class="legend-scale">
+          <div class="ls-cell zero">0</div>
+          <div class="ls-cell one">1</div>
+          <div class="ls-cell two">2</div>
+          <div class="ls-cell three">3+</div>
+        </div>
+        <span class="legend-flag" style="margin-left: auto;">
+          <span class="sample" style="background-image: repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 4px); background-color: rgba(226,75,74,0.5);"></span>
+          Rayado: activo desde octubre
+        </span>
+      </div>
+      <div class="heatmap-scroll">
+        <div class="heatmap" id="heatmap-doc"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="tab-content" id="tab-nodocentes">
+
+    <div class="kpis" id="kpis-nodocentes"></div>
+
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <h2>Detalle por franja horaria</h2>
+          <div class="section-desc">Seleccioná día y hora para ver quiénes están por grupo funcional.</div>
+        </div>
+      </div>
+      <div class="detail-controls">
+        <label>
+          Día:
+          <select id="detail-day-nod">
+            <option value="0">Lunes</option>
+            <option value="1">Martes</option>
+            <option value="2" selected>Miércoles</option>
+            <option value="3">Jueves</option>
+            <option value="4">Viernes</option>
+          </select>
+        </label>
+        <label>
+          Hora:
+          <input type="range" id="detail-hour-nod" min="8" max="20" value="14" step="1">
+        </label>
+        <span class="detail-hour-label" id="detail-hour-label-nod">14:00 – 15:00</span>
+      </div>
+      <div class="detail-grid" id="detail-grid-nod"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <h2>Grilla horaria por grupo funcional</h2>
+          <div class="section-desc">Presencia semanal del personal no docente. La disponibilidad remota no se cuenta como cobertura del edificio.</div>
+        </div>
+      </div>
+      <div class="heatmap-legend">
+        <span>Personas disponibles:</span>
+        <div class="legend-scale">
+          <div class="ls-cell zero">0</div>
+          <div class="ls-cell one">1</div>
+          <div class="ls-cell two">2</div>
+          <div class="ls-cell three">3+</div>
+        </div>
+      </div>
+      <div class="heatmap-scroll">
+        <div class="heatmap" id="heatmap-nod"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <p><strong>Metodología.</strong> Una persona cuenta en una hora si su franja horaria se solapa con esa ventana (aunque sea parcialmente). La disponibilidad remota se excluye del conteo presencial.</p>
+    <p><strong>Marcas visuales.</strong> Las franjas rayadas en Robótica corresponden a Leandro González, activas desde octubre. Las etiquetas "sin VcF" identifican a quienes no trabajan con menores de 18 años.</p>
+    <p><strong>Coordinación Pedagógica · Centro de Simulación · Agencia de Habilidades para el Futuro, GCBA</strong></p>
+  </footer>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ============ CONSTANTS ============
+const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
+const DIAS_CORTO = ["L", "M", "X", "J", "V"];
+const HORA_INI = 8, HORA_FIN = 21;
+
+const LABS = [
+  { id: "sustentabilidad", nombre: "Sustentabilidad", color: "#639922", rgb: "99, 153, 34" },
+  { id: "seguridad", nombre: "Seguridad e Higiene", color: "#BA7517", rgb: "186, 117, 23" },
+  { id: "ia", nombre: "Inteligencia Artificial", color: "#378ADD", rgb: "55, 138, 221" },
+  { id: "logistica", nombre: "Logística y Construcciones", color: "#D85A30", rgb: "216, 90, 48" },
+  { id: "energias", nombre: "Energías", color: "#1D9E75", rgb: "29, 158, 117" },
+  { id: "finanzas", nombre: "Finanzas", color: "#7F77DD", rgb: "127, 119, 221" },
+  { id: "ra", nombre: "Realidad Aumentada", color: "#D4537E", rgb: "212, 83, 126" },
+  { id: "robotica", nombre: "Robótica y Automatizaciones", color: "#E24B4A", rgb: "226, 75, 74" }
+];
+
+const GRUPOS = [
+  { id: "Coordinación", nombre: "Coordinación", color: "#4A6FA5", rgb: "74, 111, 165" },
+  { id: "Administración", nombre: "Administración", color: "#6B6A64", rgb: "107, 106, 100" },
+  { id: "Referente", nombre: "Referentes", color: "#B85450", rgb: "184, 84, 80" },
+  { id: "FIPE", nombre: "FIPE", color: "#2A7A55", rgb: "42, 122, 85" }
+];
+
+// ============ DATA INICIAL ============
+const DOCENTES = [
+  { n: "Ramirez Leandro", lab: "sustentabilidad", vcf: true, obs: "", f: [
+    {d:0,i:9,e:17},{d:1,i:9,e:17},{d:2,i:9,e:17},{d:3,i:9,e:17},{d:4,i:9,e:17}
+  ]},
+  { n: "Martín Haupt", lab: "sustentabilidad", vcf: true, obs: "", f: [
+    {d:1,i:9,e:17},{d:3,i:9,e:17}
+  ]},
+  { n: "Viera Laura", lab: "seguridad", vcf: true, obs: "", f: [
+    {d:0,i:8,e:15},{d:2,i:8,e:15},{d:4,i:8,e:15},{d:1,i:17,e:20},{d:3,i:17,e:20}
+  ]},
+  { n: "Lopez Jorge", lab: "ia", vcf: true, obs: "", f: [
+    {d:0,i:18,e:21},{d:1,i:18,e:21},{d:2,i:18,e:21},{d:3,i:18,e:21},{d:4,i:18,e:21}
+  ]},
+  { n: "Gala Cacchione", lab: "ia", vcf: true, obs: "", f: [
+    {d:1,i:12,e:18},{d:2,i:10,e:16},{d:3,i:13,e:18},{d:4,i:9,e:14}
+  ]},
+  { n: "Rubén Cabrera", lab: "logistica", vcf: true, obs: "", f: [
+    {d:2,i:14.5,e:18.5},{d:4,i:14.5,e:18.5}
+  ]},
+  { n: "Sanchez Gabriel", lab: "logistica", vcf: true, obs: "", f: [
+    {d:1,i:9,e:13},{d:3,i:9,e:13}
+  ]},
+  { n: "Salvo Aien", lab: "energias", vcf: true, obs: "", f: [
+    {d:0,i:13,e:19},{d:2,i:13,e:19},{d:4,i:13,e:19}
+  ]},
+  { n: "Pablo Arcucci", lab: "finanzas", vcf: true, obs: "", f: [
+    {d:0,i:8,e:14},{d:1,i:8,e:14},{d:2,i:8,e:14},{d:3,i:8,e:14},{d:4,i:8,e:14}
+  ]},
+  { n: "Julián Blanc", lab: "finanzas", vcf: true, obs: "", f: [
+    {d:0,i:14,e:20},{d:1,i:14,e:20},{d:2,i:14,e:20},{d:3,i:14,e:20},{d:4,i:14,e:20}
+  ]},
+  { n: "África Aular", lab: "ra", vcf: true, obs: "", f: [
+    {d:0,i:9,e:16},{d:1,i:9,e:16},{d:2,i:9,e:16},{d:3,i:9,e:16},{d:4,i:9,e:16}
+  ]},
+  { n: "Juan Guastini", lab: "ra", vcf: true, obs: "", f: [
+    {d:0,i:12,e:20},{d:1,i:12,e:20},{d:2,i:12,e:20},{d:3,i:12,e:20},{d:4,i:12,e:20}
+  ]},
+  { n: "Zelmar Forni", lab: "robotica", vcf: false, obs: "No trabaja con menores de 18 años.", f: [
+    {d:1,i:17,e:21},{d:3,i:17,e:21}
+  ]},
+  { n: "Leandro Gonzalez", lab: "robotica", vcf: false, obs: "No trabaja con menores de 18 años.", f: [
+    {d:1,i:9,e:13},{d:3,i:9,e:13},
+    {d:0,i:18,e:21,pending:true},{d:1,i:18,e:21,pending:true},{d:4,i:18,e:21,pending:true}
+  ]},
+  { n: "Ariel Mosquera", lab: "robotica", vcf: true, obs: "", f: [
+    {d:0,i:13.5,e:18},{d:1,i:13,e:17},{d:2,i:13,e:17},{d:3,i:13,e:17}
+  ]}
+];
+
+const NO_DOCENTES = [
+  { n: "Silvina Rapossi", grupo: "Coordinación", rol: "Coordinación Pedagógica", obs: "Disponibilidad de abril a diciembre.", f: [
+    {d:0,i:12,e:20},{d:1,i:10,e:17},{d:2,i:10,e:17},{d:3,i:12,e:18},{d:4,i:10,e:17}
+  ]},
+  { n: "Carolina Cervi", grupo: "Coordinación", rol: "Coordinación Pedagógica (colaboradora)", obs: "Ex Construí.", f: [
+    {d:0,i:8.5,e:13.5},{d:1,i:8.5,e:13.5},{d:2,i:8.5,e:13.5},{d:3,i:8.5,e:13.5},{d:4,i:8.5,e:13.5}
+  ]},
+  { n: "Lucila de Dios", grupo: "Coordinación", rol: "Coordinación Institucional", obs: "", f: [
+    {d:0,i:9,e:15},{d:1,i:9,e:15},{d:2,i:9,e:15},{d:3,i:9,e:15}
+  ]},
+  { n: "Agustín Figueroa", grupo: "Coordinación", rol: "Coordinación Administrativo-operativa", obs: "", f: [
+    {d:0,i:9,e:18},{d:2,i:9,e:17},{d:3,i:9,e:15},{d:4,i:9,e:15}
+  ]},
+  { n: "Christian González", grupo: "Coordinación", rol: "Coordinación Administrativo-operativa", obs: "", f: [
+    {d:0,i:9,e:15},{d:1,i:13,e:19},{d:2,i:9,e:15},{d:3,i:9,e:15},{d:4,i:13,e:19}
+  ]},
+  { n: "Monserrat Hurtado", grupo: "Administración", rol: "Administrativo", obs: "", f: [
+    {d:0,i:15,e:18},{d:1,i:15,e:20},{d:2,i:11,e:18},{d:3,i:13,e:18}
+  ]},
+  { n: "Pilar Garzia", grupo: "Referente", rol: "Vinculación con el Futuro", obs: "El viernes no se considera disponibilidad presencial.", f: [
+    {d:0,i:11,e:18},{d:1,i:9,e:16},{d:2,i:11,e:18},{d:3,i:9,e:16}
+  ], remoto: [4]},
+  { n: "Santiago de la Barrera", grupo: "Referente", rol: "Logística y Construcciones", obs: "Referente de laboratorio; no docente.", f: [
+    {d:0,i:10,e:16},{d:1,i:10,e:16},{d:2,i:10,e:16},{d:3,i:10,e:16},{d:4,i:10,e:16}
+  ]},
+  { n: "Liliana Zuk", grupo: "Referente", rol: "Logística y Construcciones", obs: "Referente de laboratorio; no docente.", f: [
+    {d:0,i:10,e:16},{d:1,i:10,e:16},{d:3,i:10,e:16}
+  ]},
+  { n: "Flavia Sarmiento", grupo: "Referente", rol: "Finanzas", obs: "Referente de laboratorio; no docente.", f: [
+    {d:0,i:12,e:18},{d:1,i:9,e:15},{d:2,i:9,e:15},{d:3,i:12,e:18},{d:4,i:9,e:15}
+  ]},
+  { n: "LIPIANSKY, Cynthia", grupo: "FIPE", rol: "Facilitador (FIPE)", obs: "", f: [
+    {d:2,i:17,e:21},{d:3,i:18,e:20},{d:4,i:17,e:21}
+  ]},
+  { n: "SAREISIAN, Patricia Pamela", grupo: "FIPE", rol: "Facilitador (FIPE)", obs: "", f: [
+    {d:0,i:17,e:21},{d:1,i:17,e:21},{d:2,i:17,e:21},{d:3,i:17,e:21},{d:4,i:17,e:21}
+  ]},
+  { n: "SIMI Virginia", grupo: "FIPE", rol: "Facilitador (FIPE)", obs: "", f: [
+    {d:0,i:17,e:21},{d:1,i:17,e:21},{d:3,i:18,e:20}
+  ]},
+  { n: "Theo Lavena", grupo: "FIPE", rol: "Administrativo FIPE/Finanzas", obs: "", f: [
+    {d:0,i:12,e:17},{d:1,i:12,e:17},{d:2,i:12,e:17},{d:3,i:12,e:17},{d:4,i:12,e:17}
+  ]}
+];
+
+// ============ HELPERS ============
+function estaDisponibleEnHora(persona, dia, hora) {
+  return (persona.f || []).some(f =>
+    f.d === dia && f.i < (hora + 1) && f.e > hora
+  );
+}
+function personasEnFranja(items, catKey, catId, dia, hora) {
+  return items.filter(p => p[catKey] === catId && estaDisponibleEnHora(p, dia, hora))
+    .map(p => {
+      const f = p.f.find(fr => fr.d === dia && fr.i < (hora + 1) && fr.e > hora);
+      return { ...p, pending: !!f?.pending };
+    });
+}
+function horaLabel(h) {
+  const int = Math.floor(h);
+  const min = Math.round((h - int) * 60);
+  return `${String(int).padStart(2,"0")}:${String(min).padStart(2,"0")}`;
+}
+function horasSemanales(p) {
+  return (p.f || []).reduce((s, f) => s + (f.e - f.i), 0);
+}
+
+// ============ TABS ============
+document.querySelectorAll(".tab").forEach(t => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(x => x.classList.remove("active"));
+    t.classList.add("active");
+    document.getElementById("tab-" + t.dataset.tab).classList.add("active");
+  });
+});
+
+// ============ KPIs ============
+function renderKPIsDocentes() {
+  const el = document.getElementById("kpis-docentes");
+  const n = DOCENTES.length;
+  let cubiertas = 0;
+  for (let d = 0; d < 5; d++) {
+    for (let h = HORA_INI; h < HORA_FIN; h++) {
+      LABS.forEach(lab => {
+        const cnt = personasEnFranja(DOCENTES, "lab", lab.id, d, h).length;
+        if (cnt > 0) cubiertas++;
+      });
+    }
+  }
+  const total = LABS.length * 5 * 13;
+  const pct = Math.round((cubiertas / total) * 100);
+  const sinVcf = DOCENTES.filter(d => !d.vcf).length;
+  el.innerHTML = `
+    <div class="kpi">
+      <div class="kpi-label">Docentes activos</div>
+      <div class="kpi-value">${n}</div>
+      <div class="kpi-hint">${sinVcf} sin habilitación para menores</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Cobertura del edificio</div>
+      <div class="kpi-value">${pct}%</div>
+      <div class="kpi-hint">${cubiertas} de ${total} franjas semanales</div>
+    </div>`;
+}
+
+function renderKPIsNoDocentes() {
+  const el = document.getElementById("kpis-nodocentes");
+  const n = NO_DOCENTES.length;
+  let cubiertas = 0;
+  for (let d = 0; d < 5; d++) {
+    for (let h = HORA_INI; h < HORA_FIN; h++) {
+      GRUPOS.forEach(g => {
+        const cnt = personasEnFranja(NO_DOCENTES, "grupo", g.id, d, h).length;
+        if (cnt > 0) cubiertas++;
+      });
+    }
+  }
+  const total = GRUPOS.length * 5 * 13;
+  const pct = Math.round((cubiertas / total) * 100);
+  const conRemoto = NO_DOCENTES.filter(d => (d.remoto || []).length > 0).length;
+  el.innerHTML = `
+    <div class="kpi">
+      <div class="kpi-label">Personal activo</div>
+      <div class="kpi-value">${n}</div>
+      <div class="kpi-hint">${conRemoto} con disponibilidad remota</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Franjas con presencia</div>
+      <div class="kpi-value">${pct}%</div>
+      <div class="kpi-hint">${cubiertas} de ${total} franjas semanales</div>
+    </div>`;
+}
+
+// ============ HEATMAP ============
+function renderHeatmap(items, categorias, catKey, containerId) {
+  const el = document.getElementById(containerId);
+  let html = "";
+  html += `<div class="lab-name" style="background:transparent;color:var(--muted);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;">${catKey === "lab" ? "Laboratorio" : "Grupo funcional"}</div>`;
+  for (let d = 0; d < 5; d++) {
+    html += `<div class="day-header ${d > 0 ? "first-of-day" : ""}" style="grid-column: span 13;">${DIAS[d]}</div>`;
+  }
+  html += `<div></div>`;
+  for (let d = 0; d < 5; d++) {
+    for (let h = HORA_INI; h < HORA_FIN; h++) {
+      const showLabel = (h % 2 === 0) || (h === HORA_INI) || (h === HORA_FIN - 1);
+      const first = (h === HORA_INI && d > 0) ? " first-of-day" : "";
+      html += `<div class="hour-header${first}">${showLabel ? h : ""}</div>`;
+    }
+  }
+  categorias.forEach(cat => {
+    html += `<div class="lab-name" style="background:${cat.color}">${cat.nombre}</div>`;
+    for (let d = 0; d < 5; d++) {
+      for (let h = HORA_INI; h < HORA_FIN; h++) {
+        const personas = personasEnFranja(items, catKey, cat.id, d, h);
+        const n = personas.length;
+        const hasPending = personas.some(x => x.pending);
+        let cls = "cell";
+        let style = "";
+        if (n === 0) {
+          cls += " zero";
+        } else {
+          const lvl = n === 1 ? 0.30 : n === 2 ? 0.6 : 0.9;
+          style = `background: rgba(${cat.rgb}, ${lvl}); color: ${n >= 3 ? "white" : "var(--text)"};`;
+          if (hasPending) cls += " pending";
+        }
+        if (h === HORA_INI && d > 0) cls += " first-of-day";
+        html += `<div class="${cls}" style="${style}" data-cat="${cat.id}" data-day="${d}" data-hour="${h}" data-cat-key="${catKey}">${n || ""}</div>`;
+      }
+    }
+  });
+  el.innerHTML = html;
+  el.querySelectorAll(".cell").forEach(c => {
+    c.addEventListener("mouseenter", onCellHover);
+    c.addEventListener("mouseleave", onCellLeave);
+    c.addEventListener("mousemove", onCellMove);
+    c.addEventListener("click", onCellClick);
+  });
+}
+
+// ============ TOOLTIP ============
+const tooltip = document.getElementById("tooltip");
+function onCellHover(e) {
+  const c = e.currentTarget;
+  const catId = c.dataset.cat;
+  const catKey = c.dataset.catKey;
+  const dia = +c.dataset.day;
+  const hora = +c.dataset.hour;
+  const items = catKey === "lab" ? DOCENTES : NO_DOCENTES;
+  const categorias = catKey === "lab" ? LABS : GRUPOS;
+  const cat = categorias.find(l => l.id === catId);
+  const personas = personasEnFranja(items, catKey, catId, dia, hora);
+  let listHtml = "";
+  if (personas.length === 0) {
+    listHtml = `<div class="t-empty">Sin presencia en esta franja</div>`;
+  } else {
+    listHtml = `<div class="t-list">` + personas.map(p => {
+      const flags = [];
+      if (p.vcf === false) flags.push(`<span class="t-flag novcf">sin VcF</span>`);
+      if (p.pending) flags.push(`<span class="t-flag pending">desde oct</span>`);
+      return `<div>${p.n}${flags.join("")}</div>`;
+    }).join("") + `</div>`;
+  }
+  tooltip.innerHTML = `
+    <div class="t-title">${cat.nombre}</div>
+    <div class="t-count">${DIAS[dia]} · ${horaLabel(hora)} – ${horaLabel(hora+1)}</div>
+    ${listHtml}`;
+  tooltip.classList.add("visible");
+}
+function onCellMove(e) {
+  const x = e.clientX + 14;
+  const y = e.clientY + 14;
+  const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+  const finalX = (x + w > window.innerWidth) ? e.clientX - w - 14 : x;
+  const finalY = (y + h > window.innerHeight) ? e.clientY - h - 14 : y;
+  tooltip.style.left = finalX + "px";
+  tooltip.style.top = finalY + "px";
+}
+function onCellLeave() { tooltip.classList.remove("visible"); }
+function onCellClick(e) {
+  const c = e.currentTarget;
+  const catKey = c.dataset.catKey;
+  const suffix = catKey === "lab" ? "doc" : "nod";
+  document.getElementById("detail-day-" + suffix).value = c.dataset.day;
+  document.getElementById("detail-hour-" + suffix).value = c.dataset.hour;
+  updateDetail(suffix);
+}
+
+// ============ DETAIL ============
+function updateDetail(suffix) {
+  const dia = +document.getElementById("detail-day-" + suffix).value;
+  const hora = +document.getElementById("detail-hour-" + suffix).value;
+  document.getElementById("detail-hour-label-" + suffix).textContent = `${horaLabel(hora)} – ${horaLabel(hora+1)}`;
+  const gridEl = document.getElementById("detail-grid-" + suffix);
+  if (suffix === "doc") {
+    gridEl.innerHTML = LABS.map(lab => {
+      const docs = personasEnFranja(DOCENTES, "lab", lab.id, dia, hora);
+      const empty = docs.length === 0;
+      return `<div class="detail-card ${empty ? "empty" : ""}">
+        <div class="detail-lab" style="color:${lab.color}">${lab.nombre}</div>
+        ${empty ? `<div class="detail-empty-msg">Sin cobertura docente</div>` :
+          docs.map(d => {
+            const flags = [];
+            if (!d.vcf) flags.push(`<span class="flag novcf">sin VcF</span>`);
+            if (d.pending) flags.push(`<span class="flag pending">desde oct</span>`);
+            return `<div class="detail-teacher">
+              <div class="detail-teacher-info"><span class="name">${d.n}</span></div>
+              <div class="flags">${flags.join("")}</div>
+            </div>`;
+          }).join("")
+        }
+      </div>`;
+    }).join("");
+  } else {
+    gridEl.innerHTML = GRUPOS.map(grupo => {
+      const personas = personasEnFranja(NO_DOCENTES, "grupo", grupo.id, dia, hora);
+      const empty = personas.length === 0;
+      return `<div class="detail-card ${empty ? "empty" : ""}">
+        <div class="detail-lab" style="color:${grupo.color}">${grupo.nombre}</div>
+        ${empty ? `<div class="detail-empty-msg">Sin presencia</div>` :
+          personas.map(p => {
+            const flags = [];
+            if (p.remoto && p.remoto.includes(dia)) flags.push(`<span class="flag remote">remoto</span>`);
+            return `<div class="detail-teacher">
+              <div class="detail-teacher-info">
+                <span class="name">${p.n}</span>
+                <span class="role">${p.rol}</span>
+              </div>
+              <div class="flags">${flags.join("")}</div>
+            </div>`;
+          }).join("")
+        }
+      </div>`;
+    }).join("");
+  }
+}
+
+// ============ EVENT LISTENERS ============
+["doc", "nod"].forEach(suffix => {
+  document.getElementById("detail-day-" + suffix).addEventListener("change", () => updateDetail(suffix));
+  document.getElementById("detail-hour-" + suffix).addEventListener("input", () => updateDetail(suffix));
+});
+
+// ============ RENDER ALL ============
+function renderAll() {
+  renderKPIsDocentes();
+  renderKPIsNoDocentes();
+  renderHeatmap(DOCENTES, LABS, "lab", "heatmap-doc");
+  renderHeatmap(NO_DOCENTES, GRUPOS, "grupo", "heatmap-nod");
+  updateDetail("doc");
+  updateDetail("nod");
+}
+renderAll();
+</script>
+
+</body>
+</html>

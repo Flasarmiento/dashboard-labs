@@ -1422,7 +1422,11 @@ document.getElementById('cancelSelection').onclick = () => {
     cancelRangeSelection();
 };
 document.getElementById('btnLimpiar').onclick  = clearDay;
-document.getElementById('btnHorarios').onclick = showTeacherSchedule;
+document.getElementById('btnHorarios').onclick = () => {
+    document.getElementById("horariosGridContainer").innerHTML =
+        '<iframe src="horarios_detalle.html" style="width:100%; height:75vh; border:none;"></iframe>';
+    document.getElementById("horariosModal").classList.add('visible');
+};
 document.getElementById('closeModal').onclick        = () => document.getElementById('modal').classList.remove('visible');
 document.getElementById('closeHorariosModal').onclick = () => document.getElementById('horariosModal').classList.remove('visible');
 
