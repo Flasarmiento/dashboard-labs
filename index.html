@@ -251,8 +251,9 @@ body {
 }
 #calendarTable th {
     background: #FFCC00; color: #153244; position: sticky; top: 0; z-index: 10;
-    font-weight: 600; padding: 8px 4px; font-size: 0.82rem;
+    font-weight: 600; padding: 6px 3px; font-size: 0.72rem;
     height: 38px; cursor: pointer;
+    white-space: normal; word-break: break-word; line-height: 1.1;
 }
 #calendarTable th:first-child {
     background: #153244; color: #FFCC00; width: 78px;
@@ -919,7 +920,7 @@ function buildTable() {
     thead.innerHTML = '<th>Hora</th>';
     labs.forEach(lab => {
         const th = document.createElement("th");
-        th.textContent = (lab === "HYS") ? "Recorridas" : lab;
+        th.textContent = (lab === "HYS") ? "RECORRIDAS" : lab;
         th.addEventListener("mouseenter", e => showLabTooltip(lab, e));
         th.addEventListener("mouseleave", hideLabTooltip);
         th.addEventListener("mousemove",  e => showLabTooltip(lab, e));
@@ -1373,7 +1374,7 @@ function buildSidebar() {
         div.className = "lab";
         div.style.backgroundColor = colors[i];
         div.style.color = "#FFFFFF";
-        div.textContent = (lab === "HYS") ? "Recorridas" : lab;
+        div.textContent = (lab === "HYS") ? "RECORRIDAS" : lab;
         div.addEventListener("mouseenter", e => showLabTooltip(lab, e));
         div.addEventListener("mouseleave", hideLabTooltip);
         div.addEventListener("mousemove",  e => showLabTooltip(lab, e));
