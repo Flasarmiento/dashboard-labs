@@ -541,8 +541,8 @@ const auth  = firebase.auth();
 const db    = firebase.firestore();
 
 // ======================== CONSTANTES ========================
-const labs   = ["SUM","HYS","TEXTIL","RA","ROBÓTICA","IA","FINANZAS","TRANSPORTE","LOGÍSTICA","HYS 2","STREAMING","ENERGÍA","SUSTENTABILIDAD","DIGITAL"];
-const colors = ["#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEEAD","#D4A5A5","#9B59B6","#3498DB","#E67E22","#2ECC71","#E74C3C","#1ABC9C","#F1C40F","#34495E"];
+const labs   = ["SUM","HYS","TEXTIL","RA","ROBÓTICA","IA","FINANZAS","TRANSPORTE","LOGÍSTICA","HYS 2","STREAMING","ENERGÍA","SUSTENTABILIDAD"];
+const colors = ["#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEEAD","#D4A5A5","#9B59B6","#3498DB","#E67E22","#2ECC71","#E74C3C","#1ABC9C","#F1C40F"];
 const hours  = Array.from({length:14}, (_,i) => 8 + i); // 8:00 a 21:00
 
 const labInfo = {
@@ -558,8 +558,7 @@ const labInfo = {
     "HYS 2":           { piso:"2", descripcion:"HYS2",           capacidad:"3",      observaciones:"Simuladores",      horarios:"Viera/García" },
     "STREAMING":       { piso:"2", descripcion:"STREAMING",       capacidad:"4",      observaciones:"Micrófonos",       horarios:"Sin horarios asignados" },
     "ENERGÍA":         { piso:"2", descripcion:"ENERGÍA",         capacidad:"24",     observaciones:"22 notebook",      horarios:"Salvo (Tarde/Noche), González (Mañ)" },
-    "SUSTENTABILIDAD": { piso:"2", descripcion:"SUSTENTABILIDAD", capacidad:"12",     observaciones:"Notebook",         horarios:"Ramirez, Haupt" },
-    "DIGITAL":         { piso:"2", descripcion:"DIGITAL",         capacidad:"12",     observaciones:"Notebook",         horarios:"Sin horarios asignados" }
+    "SUSTENTABILIDAD": { piso:"2", descripcion:"SUSTENTABILIDAD", capacidad:"12",     observaciones:"Notebook",         horarios:"Ramirez, Haupt" }
 };
 
 const teacherSchedule = {
@@ -920,7 +919,7 @@ function buildTable() {
     thead.innerHTML = '<th>Hora</th>';
     labs.forEach(lab => {
         const th = document.createElement("th");
-        th.textContent = lab;
+        th.textContent = (lab === "HYS") ? "Recorridas" : lab;
         th.addEventListener("mouseenter", e => showLabTooltip(lab, e));
         th.addEventListener("mouseleave", hideLabTooltip);
         th.addEventListener("mousemove",  e => showLabTooltip(lab, e));
@@ -1374,7 +1373,7 @@ function buildSidebar() {
         div.className = "lab";
         div.style.backgroundColor = colors[i];
         div.style.color = "#FFFFFF";
-        div.textContent = lab;
+        div.textContent = (lab === "HYS") ? "Recorridas" : lab;
         div.addEventListener("mouseenter", e => showLabTooltip(lab, e));
         div.addEventListener("mouseleave", hideLabTooltip);
         div.addEventListener("mousemove",  e => showLabTooltip(lab, e));
