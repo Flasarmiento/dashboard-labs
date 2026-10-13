@@ -474,7 +474,8 @@ body {
         <button class="btn active" data-view="diario">Vista Diaria</button>
         <button class="btn" data-view="semanal">Vista Semanal</button>
       </div>
-      <button class="btn" id="rangeModeBtn">📏 Modo Rango</button>
+      <button class="btn" id="btnRecurrente" style="background:#21855c;display:none">📅 Reserva repetida</button>
+       <button class="btn" id="rangeModeBtn">📏 Modo Rango</button>
       <button class="btn" id="btnHorarios">👨‍🏫 Horarios</button>
       <button class="btn" id="btnLimpiar" style="display: none;">🧹 Limpiar día</button>
       <button class="btn" id="btnAdminUsers" style="display:none;">👥 Usuarios</button>
@@ -527,6 +528,30 @@ body {
   </div>
 </div>
 
+
+<!-- RESERVAS RECURRENTES -->
+<div id="recurrenteModal" class="modal-overlay" style="z-index:22000">
+ <div class="modal-box" style="width:95%;max-width:650px;max-height:90vh;overflow:auto;gap:12px">
+  <div class="modal-header"><h3>📅 Nueva reserva / Repetición</h3><button class="modal-close-btn" id="recCerrar">✕</button></div>
+  <label>Actividad <input id="recTitulo" style="width:100%;padding:9px" placeholder="Nombre de la actividad"></label>
+  <label>Espacio <select id="recLab" style="width:100%;padding:9px"></select></label>
+  <div style="display:flex;gap:10px;flex-wrap:wrap"><label>Primera fecha <input type="date" id="recFecha"></label><label>Desde <input type="time" id="recInicio" step="1800"></label><label>Hasta <input type="time" id="recFin" step="1800"></label></div>
+  <label>Repetición <select id="recTipo" style="padding:9px;width:100%"><option value="una">Una sola vez</option><option value="semanas">Semanal / varios días de la semana</option><option value="fechas">Fechas específicas (no consecutivas)</option></select></label>
+  <div id="recSemanas" style="display:none;background:#f5f7fa;padding:12px;border-radius:8px">
+   <label>Repetir durante <input type="number" id="recCantidad" value="3" min="1" max="52" style="width:65px;padding:6px"> semanas (incluida la primera)</label>
+   <p style="margin:10px 0 5px">Días de la semana:</p>
+   <div id="recDias" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+  </div>
+  <div id="recFechas" style="display:none;background:#f5f7fa;padding:12px;border-radius:8px">
+   <p>Agregá todas las fechas que necesites (la primera ya está incluida):</p>
+   <div style="display:flex;gap:8px;margin:8px 0"><input type="date" id="recFechaExtra"><button class="btn" id="recAgregarFecha">Agregar</button></div>
+   <div id="recListaFechas"></div>
+  </div>
+  <div id="recEstado" style="white-space:pre-wrap;font-size:.85rem;color:#153244"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="recCancelar">Cancelar</button><button class="btn" id="recGuardar" style="background:#21855c">Comprobar y guardar</button></div>
+ </div>
+</div>
+
 <!-- ===================== MODAL HORARIOS PROFESORES ===================== -->
 <div id="horariosModal" class="modal-overlay">
   <div id="horariosModalContent" class="modal-box">
@@ -557,8 +582,8 @@ const auth  = firebase.auth();
 const db    = firebase.firestore();
 
 // ======================== CONSTANTES ========================
-const labs   = ["SUM","HYS","TEXTIL","RA","ROBÓTICA","IA","FINANZAS","TRANSPORTE","LOGÍSTICA","HYS 2","STREAMING","ENERGÍA","SUSTENTABILIDAD","SALA DE REUNIONES"];
-const colors = ["#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEEAD","#D4A5A5","#9B59B6","#3498DB","#E67E22","#2ECC71","#E74C3C","#1ABC9C","#F1C40F","#607D8B"];
+const labs   = ["SUM","HYS","SALA DE REUNIONES","TEXTIL","RA","ROBÓTICA","IA","FINANZAS","TRANSPORTE","LOGÍSTICA","HYS 2","STREAMING","ENERGÍA","SUSTENTABILIDAD","SALA DE REUNIONES"];
+const colors = ["#FF6B6B","#4ECDC4","#607D8B","#45B7D1","#96CEB4","#FFEEAD","#D4A5A5","#9B59B6","#3498DB","#E67E22","#2ECC71","#E74C3C","#1ABC9C","#F1C40F"];
 const hours  = Array.from({length:14}, (_,i) => 8 + i); // 8:00 a 21:00
 
 const labInfo = {
@@ -651,7 +676,7 @@ function convertirReservas(snapshot) {
             startHour: data.inicio?.hour || 0, startMinute: data.inicio?.minute || 0,
             endHour: data.fin?.hour || 0, endMinute: data.fin?.minute || 0,
             color: data.color || colors[labs.indexOf(lab)] || '#153244',
-            creadoPor: data.creadoPor
+            creadoPor: data.creadoPor, serieId: data.serieId || null
         };
     });
     return resultado;
@@ -954,36 +979,166 @@ function hasOverlap(dateKey, lab, sh, sm, eh, em, excludeId = null) {
 }
 
 // ======================== OPERACIONES DE EVENTOS (UI) ========================
-async function createSingleEvent(lab, hour, half) {
-    if (isWeekend(currentDate)) { alert(`No se puede reservar el ${getWeekendText(currentDate)}.`); return; }
-    const title = prompt(`Nuevo evento en ${lab} — ${hour}:${String(half).padStart(2,'0')}`, "");
-    if (!title) return;
 
-    const dateKey   = getCurrentDateKey();
-    let endH = parseInt(hour), endM = parseInt(half) + 60;
-    if (endM >= 60) { endH++; endM -= 60; }
-
-    if (endH > 22) { alert("El evento excede el horario máximo (22:00)."); return; }
-    if (hasOverlap(dateKey, lab, parseInt(hour), parseInt(half), endH, endM)) {
-        alert("❌ Horario ya ocupado en este laboratorio."); return;
+// RECURRENCIA: cada fecha se guarda como reserva independiente con un identificador de serie.
+let recExtras = new Set();
+const recEl = id => document.getElementById(id);
+const recDate = key => new Date(key + 'T12:00:00');
+const recKey = d => getLocalDateKey(d);
+function recHora(valor) {
+    const match = /^(\d{2}):(\d{2})$/.exec(valor || '');
+    if (!match) throw new Error('Ingresá horarios válidos.');
+    const h = Number(match[1]), m = Number(match[2]);
+    if (h > 23 || m > 59) throw new Error('Horario inválido.');
+    return {hour:h, minute:m};
+}
+function recMin(h) { return h.hour * 60 + h.minute; }
+function recFechaValida(key) { return /^\d{4}-\d{2}-\d{2}$/.test(key) && recKey(recDate(key)) === key; }
+function recPintarExtras() {
+    const destino = recEl('recListaFechas'); destino.replaceChildren();
+    [...recExtras].sort().forEach(fecha => {
+        const fila=document.createElement('div'); fila.style='display:flex;gap:8px;align-items:center;margin:5px 0';
+        const texto=document.createElement('span'); texto.textContent=fecha; fila.appendChild(texto);
+        const boton=document.createElement('button'); boton.className='btn'; boton.textContent='Quitar';
+        boton.onclick=()=>{recExtras.delete(fecha);recPintarExtras();}; fila.appendChild(boton); destino.appendChild(fila);
+    });
+}
+function recAbrir(fecha, lab, titulo, sh, sm, eh, em) {
+    if (!isAdmin) return;
+    recExtras=new Set(); recPintarExtras();
+    recEl('recTitulo').value=titulo || '';
+    recEl('recLab').replaceChildren();
+    labs.forEach(l=>{const o=document.createElement('option');o.value=l;o.textContent=l;recEl('recLab').appendChild(o);});
+    recEl('recLab').value=lab;
+    recEl('recFecha').value=fecha;
+    recEl('recInicio').value=`${String(sh).padStart(2,'0')}:${String(sm).padStart(2,'0')}`;
+    recEl('recFin').value=`${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
+    recEl('recTipo').value='una';recEl('recCantidad').value='3';recEl('recEstado').textContent='';
+    recEl('recDias').replaceChildren();
+    ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].forEach((nombre,i)=>{
+        const dia=(i+1)%7, l=document.createElement('label'), cb=document.createElement('input');
+        cb.type='checkbox';cb.value=String(dia);cb.checked=recDate(fecha).getDay()===dia;
+        l.append(cb,document.createTextNode(' '+nombre));recEl('recDias').appendChild(l);
+    });
+    recMostrarTipo();recEl('recurrenteModal').classList.add('visible');
+}
+function recMostrarTipo(){recEl('recSemanas').style.display=recEl('recTipo').value==='semanas'?'block':'none';recEl('recFechas').style.display=recEl('recTipo').value==='fechas'?'block':'none';}
+recEl('recTipo').onchange=recMostrarTipo;
+recEl('recCerrar').onclick=recEl('recCancelar').onclick=()=>recEl('recurrenteModal').classList.remove('visible');
+recEl('recAgregarFecha').onclick=()=>{const f=recEl('recFechaExtra').value;if(f && recFechaValida(f)){recExtras.add(f);recPintarExtras();}};
+function recFechasElegidas(){
+    const primera=recEl('recFecha').value;
+    if(!recFechaValida(primera))throw new Error('Seleccioná una fecha válida.');
+    const tipo=recEl('recTipo').value;
+    if(tipo==='una')return [primera];
+    if(tipo==='fechas')return [...new Set([primera,...recExtras])].sort();
+    const n=Number(recEl('recCantidad').value);
+    if(!Number.isInteger(n)||n<1||n>52)throw new Error('Elegí entre 1 y 52 semanas.');
+    const dias=[...recEl('recDias').querySelectorAll('input:checked')].map(e=>Number(e.value));
+    if(!dias.length)throw new Error('Seleccioná al menos un día.');
+    const inicio=recDate(primera), fin=new Date(inicio);
+    fin.setDate(fin.getDate()+7*n);
+    const fechas=[];
+    for(const d=new Date(inicio);d<fin;d.setDate(d.getDate()+1))if(dias.includes(d.getDay()))fechas.push(recKey(d));
+    return fechas;
+}
+async function recComprobarFechas(fechas, lab, inicio, fin, excluirIds=[]) {
+    const ocupadas=[];
+    // Consultas por fecha; nunca se descarga la colección completa.
+    for(const fecha of fechas){
+        const snap=await db.collection('reservas').where('fecha','==',fecha).get();
+        const conflicto=snap.docs.some(doc=>{
+            if(excluirIds.includes(doc.id))return false;
+            const r=doc.data();
+            return r.laboratorio===lab && recMin(inicio)<recMin(r.fin) && recMin(fin)>recMin(r.inicio);
+        });
+        if(conflicto)ocupadas.push(fecha);
     }
-
-    await agregarReserva(dateKey, lab, title, parseInt(hour), parseInt(half), endH, endM, colors[labs.indexOf(lab)]);
-    // onSnapshot actualiza automáticamente
+    return ocupadas;
+}
+async function recGuardar(){
+    const boton=recEl('recGuardar');if(boton.disabled)return;
+    try {
+        if(!isAdmin)throw new Error('Solo los administradores pueden reservar.');
+        const titulo=recEl('recTitulo').value.trim(), lab=recEl('recLab').value;
+        if(!titulo)throw new Error('Escribí el nombre de la actividad.');
+        const inicio=recHora(recEl('recInicio').value),fin=recHora(recEl('recFin').value);
+        if(recMin(inicio)<480||recMin(fin)>1320||recMin(inicio)>=recMin(fin))throw new Error('El horario debe estar entre las 08:00 y las 22:00.');
+        const fechas=recFechasElegidas();
+        if(fechas.length>150)throw new Error('Máximo 150 reservas por operación.');
+        const fines=fechas.filter(f=>[0,6].includes(recDate(f).getDay()));
+        if(fines.length)throw new Error('No se permiten sábados ni domingos: '+fines.join(', '));
+        boton.disabled=true;recEl('recEstado').textContent='Comprobando '+fechas.length+' fechas...';
+        const ocupadas=await recComprobarFechas(fechas,lab,inicio,fin);
+        if(ocupadas.length){recEl('recEstado').textContent='No se guardó ninguna reserva. Fechas ocupadas:\n'+ocupadas.join(', ');return;}
+        const serieId=fechas.length>1?db.collection('reservas').doc().id:null;
+        // Transacción por fecha: se vuelve a verificar antes de crear cada reserva.
+        // Las escrituras de reserva y movimiento se confirman juntas por cada fecha.
+        let guardadas=0;
+        for(const fecha of fechas){
+            const ref=db.collection('reservas').doc(),mov=db.collection('movimientos').doc();
+            const data={fecha,laboratorio:lab,titulo,inicio,fin,color:colors[labs.indexOf(lab)],
+                creadoPor:currentUser.uid,creadoPorEmail:currentUser.email||'',
+                modificadoPor:currentUser.uid,modificadoPorEmail:currentUser.email||'',
+                createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+            if(serieId)data.serieId=serieId;
+            const batch=db.batch();batch.set(ref,data);batch.set(mov,nuevoMovimiento('crear',ref.id,null,data));
+            await batch.commit();guardadas++;
+            recEl('recEstado').textContent=`Guardadas ${guardadas} de ${fechas.length}...`;
+        }
+        recEl('recurrenteModal').classList.remove('visible');
+        alert('Se guardaron '+guardadas+' reservas correctamente.');
+    }catch(e){console.error(e);recEl('recEstado').textContent='Error: '+e.message+' (si ocurrió durante el guardado, revisá las fechas ya creadas).';}
+    finally{boton.disabled=false;}
+}
+recEl('recGuardar').onclick=recGuardar;
+recEl('btnRecurrente').onclick=()=>recAbrir(getCurrentDateKey(),labs[0],'',9,0,10,0);
+async function recAccionSerie(eventId,accion,data){
+    if(!isAdmin)return;
+    try{
+        const ref=db.collection('reservas').doc(eventId),snap=await ref.get();
+        if(!snap.exists)throw new Error('La reserva ya no existe.');
+        const serie=snap.data().serieId;
+        if(!serie)return accion==='eliminar'?eliminarReserva(eventId):actualizarReserva(eventId,data);
+        const opcion=prompt('Esta reserva pertenece a una serie.\n1 → Solo esta fecha\n2 → Toda la serie\n0 → Cancelar','1');
+        if(opcion!=='1'&&opcion!=='2')return;
+        if(opcion==='1')return accion==='eliminar'?eliminarReserva(eventId):actualizarReserva(eventId,data);
+        const docs=(await db.collection('reservas').where('serieId','==',serie).get()).docs;
+        if(!docs.length)return;
+        if(accion==='eliminar'){
+            if(!confirm('¿Eliminar las '+docs.length+' reservas de la serie?'))return;
+        } else {
+            const nuevos=[];
+            for(const doc of docs){const original=doc.data();nuevos.push({id:doc.id,fecha:original.fecha,lab:data.laboratorio||original.laboratorio,inicio:data.inicio||original.inicio,fin:data.fin||original.fin});}
+            // Comprobar fechas destino si cambian laboratorio u horario.
+            if(data.laboratorio||data.inicio||data.fin){
+                const ids=docs.map(d=>d.id);
+                for(const r of nuevos){const ocupadas=await recComprobarFechas([r.fecha],r.lab,r.inicio,r.fin,ids);
+                    if(ocupadas.length)throw new Error('Conflicto en '+r.fecha+'. No se modificó la serie.');}
+            }
+        }
+        // 2 escrituras por fecha; grupos de hasta 200 reservas por lote.
+        for(let i=0;i<docs.length;i+=200){
+            const batch=db.batch();
+            docs.slice(i,i+200).forEach(doc=>{
+                const antes=doc.data(),despues={...antes,...data};
+                const mov=db.collection('movimientos').doc();
+                if(accion==='eliminar'){batch.delete(doc.ref);batch.set(mov,nuevoMovimiento('eliminar',doc.id,antes,null));}
+                else{batch.update(doc.ref,{...data,modificadoPor:currentUser.uid,modificadoPorEmail:currentUser.email||'',updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+                    batch.set(mov,nuevoMovimiento('modificar',doc.id,antes,despues));}
+            });
+            await batch.commit();
+        }
+        alert('Serie actualizada: '+docs.length+' reservas.');
+    }catch(e){console.error(e);alert('No se pudo actualizar la serie: '+e.message);}
 }
 
-async function createRangeEvent(lab, sh, sm, eh, em, durationMin) {
-    if (isWeekend(currentDate)) { alert(`No se puede reservar el ${getWeekendText(currentDate)}.`); return; }
-    const title = prompt(
-        `Nuevo bloque en ${lab}\nHorario: ${sh}:${String(sm).padStart(2,'0')} a ${eh}:${String(em).padStart(2,'0')} (${durationMin} min)`, ""
-    );
-    if (!title) return;
-
-    const dateKey = getCurrentDateKey();
-    if (hasOverlap(dateKey, lab, sh, sm, eh, em)) {
-        alert("❌ Superposición con otro evento."); return;
-    }
-    await agregarReserva(dateKey, lab, title, sh, sm, eh, em, colors[labs.indexOf(lab)]);
+async function createSingleEvent(lab,hour,half){
+ const h=Number(hour),m=Number(half), total=h*60+m+60;
+ recAbrir(getCurrentDateKey(),lab,'',h,m,Math.floor(total/60),total%60);
+}
+async function createRangeEvent(lab,sh,sm,eh,em,durationMin){
+ recAbrir(getCurrentDateKey(),lab,'',sh,sm,eh,em);
 }
 
 async function editEvent(dateKey, lab, eventId) {
@@ -991,7 +1146,7 @@ async function editEvent(dateKey, lab, eventId) {
     if (!ev) return;
     const newTitle = prompt("Editar título:", ev.title);
     if (newTitle && newTitle !== ev.title) {
-        await actualizarReserva(eventId, { titulo: newTitle });
+        await recAccionSerie(eventId, 'modificar', { titulo: newTitle });
     }
 }
 
@@ -1007,7 +1162,7 @@ async function adjustEventTime(dateKey, lab, eventId, ev) {
     if (hasOverlap(dateKey, lab, sh, sm||0, eh, em||0, eventId)) {
         alert("❌ Superposición con otro evento."); return;
     }
-    await actualizarReserva(eventId, {
+    await recAccionSerie(eventId, 'modificar', {
         inicio: { hour: sh, minute: sm || 0 },
         fin:    { hour: eh, minute: em || 0 }
     });
@@ -1016,7 +1171,7 @@ async function adjustEventTime(dateKey, lab, eventId, ev) {
 async function deleteEvent(dateKey, lab, eventId) {
     if (!events[dateKey]?.[lab]?.[eventId] && !monthEvents[dateKey]?.[lab]?.[eventId]) return;
     if (confirm("¿Eliminar este bloque de reserva?")) {
-        await eliminarReserva(eventId);
+        await recAccionSerie(eventId, 'eliminar');
     }
 }
 
@@ -1043,7 +1198,7 @@ async function moveEvent(eventDiv, targetCell) {
     if (hasOverlap(dateKey, newLab, newHour, newHalf, newEndH, newEndM, excludeId)) {
         alert("❌ Destino ocupado."); renderDayView(); return;
     }
-    await actualizarReserva(eventId, {
+    await recAccionSerie(eventId, 'modificar', {
         laboratorio: newLab,
         inicio: { hour: newHour, minute: newHalf },
         fin:    { hour: newEndH, minute: newEndM }
@@ -1325,12 +1480,8 @@ function renderWeekView() {
                     const date   = getLocalDateKey(info.date);
                     const h      = info.date.getHours();
                     const m      = info.date.getMinutes();
-                    const title  = prompt(`Nuevo evento en ${lab} — ${h}:${String(m).padStart(2,'0')}`, "");
-                    if (!title) return;
-                    let endH = h, endM = m + 60;
-                    if (endM >= 60) { endH++; endM -= 60; }
-                    if (hasOverlap(date, lab, h, m, endH, endM)) { alert("❌ Horario ya ocupado."); return; }
-                    agregarReserva(date, lab, title, h, m, endH, endM, colors[labs.indexOf(lab)]);
+                    const endTotal=h*60+m+60;
+                    recAbrir(date,lab,'',h,m,Math.floor(endTotal/60),endTotal%60);
                 }
             }
         }
@@ -1649,6 +1800,7 @@ auth.onAuthStateChanged(async user => {
         document.getElementById('userRoleDisplay').textContent  = isAdmin ? '⭐ Administrador' : '👤 Usuario';
         document.getElementById('btnAdminUsers').style.display  = isAdmin ? 'inline-block' : 'none';
         document.getElementById('btnMovimientos').style.display = isAdmin ? 'inline-block' : 'none';
+        document.getElementById('btnRecurrente').style.display = isAdmin ? 'inline-block' : 'none';
         document.getElementById('btnHorarios').style.display = isAdmin ? 'inline-block' : 'none';
 
         // Construir UI base (solo la primera vez)
