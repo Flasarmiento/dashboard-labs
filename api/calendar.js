@@ -16,19 +16,19 @@ const db = admin.firestore();
 const fail = (res, status, error) =>
   res.status(status).json({ ok: false, error });
 
-const validEmail = x =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x);
+const emailOK = s =>
+  typeof s === 'string' &&
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
-// Convierte una reserva de Firestore a un evento de Google Calendar.
-function toEvent(r) {
+function evento(r) {
   if (
     typeof r.fecha !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}$/.test(r.fecha)
   ) {
-    throw Error('Fecha de reserva inválida');
+    throw Error('Fecha inválida');
   }
 
-  function hora(o) {
+  const hora = o => {
     if (
       !o ||
       !Number.isInteger(o.hour) ||
@@ -38,14 +38,17 @@ function toEvent(r) {
       o.minute < 0 ||
       o.minute > 59
     ) {
-      throw Error('Horario de reserva inválido');
+      throw Error('Horario inválido');
     }
 
     return `${String(o.hour).padStart(2, '0')}:${String(o.minute).padStart(2, '0')}`;
-  }
+  };
 
-  const inicio = `${r.fecha}T${hora(r.inicio)}:00-03:00`;
-  const fin = `${r.fecha}T${hora(r.fin)}:00-03:00`;
+  const inicio =
+    `${r.fecha}T${hora(r.inicio)}:00-03:00`;
+
+  const fin =
+    `${r.fecha}T${hora(r.fin)}:00-03:00`;
 
   if (
     !Number.isFinite(Date.parse(inicio)) ||
@@ -67,8 +70,7 @@ function toEvent(r) {
   };
 }
 
-// Comunicación segura con Google Apps Script.
-async function script(payload) {
+async function apps(payload) {
   const url = process.env.APPS_SCRIPT_URL;
   const secret = process.env.APPS_SCRIPT_SECRET;
 
@@ -77,10 +79,10 @@ async function script(payload) {
     !secret ||
     !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)
   ) {
-    throw Error('Configuración de Apps Script inválida');
+    throw Error('Apps Script no está configurado');
   }
 
-  const response = await fetch(url, {
+  const r = await fetch(url, {
     method: 'POST',
 
     headers: {
@@ -97,30 +99,108 @@ async function script(payload) {
     signal: AbortSignal.timeout(25000)
   });
 
-  if (!response.ok) {
+  if (!r.ok) {
     throw Error(
       'Google Apps Script no respondió correctamente'
     );
   }
 
-  let result;
+  let out;
 
   try {
-    result = JSON.parse(await response.text());
+    out = JSON.parse(await r.text());
   } catch {
     throw Error('Apps Script no devolvió JSON');
   }
 
-  if (result.ok !== true) {
+  if (out.ok !== true) {
     throw Error(
-      result.error || 'Apps Script rechazó la operación'
+      out.error || 'Google rechazó la operación'
     );
   }
 
-  return result;
+  return out;
 }
 
-// API principal.
+function movimiento(accion, id, antes, despues, user) {
+  const resumen = d =>
+    d
+      ? {
+          titulo: d.titulo || '',
+          laboratorio: d.laboratorio || '',
+          fecha: d.fecha || '',
+          inicio: d.inicio || null,
+          fin: d.fin || null
+        }
+      : null;
+
+  return {
+    accion,
+    reservaId: id,
+
+    antes: resumen(antes),
+    despues: resumen(despues),
+
+    usuarioUid: user.uid,
+    usuarioEmail: user.email || '',
+    usuarioNombre: user.name || '',
+
+    timestamp:
+      admin.firestore.FieldValue.serverTimestamp()
+  };
+}
+
+function validarCambios(c) {
+  if (
+    !c ||
+    typeof c !== 'object' ||
+    Array.isArray(c)
+  ) {
+    throw Error('Faltan cambios');
+  }
+
+  const keys = Object.keys(c);
+
+  if (
+    !keys.length ||
+    keys.some(
+      k =>
+        ![
+          'titulo',
+          'laboratorio',
+          'inicio',
+          'fin'
+        ].includes(k)
+    )
+  ) {
+    throw Error('Cambio no permitido');
+  }
+
+  if (
+    'titulo' in c &&
+    (
+      typeof c.titulo !== 'string' ||
+      !c.titulo.trim() ||
+      c.titulo.length > 250
+    )
+  ) {
+    throw Error('Título inválido');
+  }
+
+  if (
+    'laboratorio' in c &&
+    (
+      typeof c.laboratorio !== 'string' ||
+      !c.laboratorio.trim() ||
+      c.laboratorio.length > 100
+    )
+  ) {
+    throw Error('Laboratorio inválido');
+  }
+
+  return c;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -142,15 +222,10 @@ module.exports = async function handler(req, res) {
       true
     );
   } catch {
-    return fail(
-      res,
-      401,
-      'Sesión inválida o vencida'
-    );
+    return fail(res, 401, 'Sesión inválida');
   }
 
   try {
-    // Verificar que sea administrador.
     const profile = await db
       .collection('usuarios')
       .doc(user.uid)
@@ -158,42 +233,48 @@ module.exports = async function handler(req, res) {
 
     if (
       !profile.exists ||
-      profile.data().rol !== 'admin'
+      profile.data().rol !== 'admin' ||
+      profile.data().activo === false
     ) {
       return fail(
         res,
         403,
-        'Solo administradores'
+        'Solo administradores activos'
       );
     }
 
     const {
       accion = 'prueba',
       reservaId,
-      invitados
+      invitados,
+      cambios
     } = req.body || {};
 
-    // Prueba de conexión.
     if (accion === 'prueba') {
-      await script({ accion: 'prueba' });
+      await apps({ accion: 'prueba' });
 
-      return res.status(200).json({
+      return res.json({
         ok: true,
         mensaje:
           'Conexión segura con Google Apps Script correcta'
       });
     }
 
-    // Acciones habilitadas.
-    if (!['crear', 'actualizar'].includes(accion)) {
+    if (
+      ![
+        'crear',
+        'actualizar',
+        'modificar',
+        'cancelar'
+      ].includes(accion)
+    ) {
       return fail(
         res,
         400,
-        'Acción todavía no habilitada'
+        'Acción desconocida'
       );
     }
 
-    // Validar ID de reserva.
     if (
       typeof reservaId !== 'string' ||
       !/^[\w-]{1,200}$/.test(reservaId)
@@ -205,47 +286,52 @@ module.exports = async function handler(req, res) {
       );
     }
 
-    // Validar destinatarios.
+    let correos;
+
     if (
-      !Array.isArray(invitados) ||
-      invitados.length < 1 ||
-      invitados.length > 50 ||
-      invitados.some(x => typeof x !== 'string')
+      accion === 'crear' ||
+      accion === 'actualizar'
     ) {
-      return fail(
-        res,
-        400,
-        'Destinatarios inválidos'
-      );
-    }
+      if (
+        !Array.isArray(invitados) ||
+        invitados.length > 50 ||
+        invitados.some(x => typeof x !== 'string')
+      ) {
+        return fail(
+          res,
+          400,
+          'Destinatarios inválidos'
+        );
+      }
 
-    const emails = [
-      ...new Set(
-        invitados.map(x =>
-          x.trim().toLowerCase()
+      correos = [
+        ...new Set(
+          invitados.map(
+            x => x.trim().toLowerCase()
+          )
         )
-      )
-    ];
+      ];
 
-    if (emails.some(x => !validEmail(x))) {
-      return fail(
-        res,
-        400,
-        'Hay correos inválidos'
-      );
+      if (
+        (accion === 'crear' && !correos.length) ||
+        correos.some(x => !emailOK(x))
+      ) {
+        return fail(
+          res,
+          400,
+          'Revisá los correos electrónicos'
+        );
+      }
     }
 
-    // Consultar la reserva real.
     const ref = db
       .collection('reservas')
       .doc(reservaId);
 
-    const lock =
-      admin.firestore.FieldValue.serverTimestamp();
+    let original;
+    let nuevo;
+    let payload;
 
-    let evento;
-
-    // Bloquear envíos simultáneos y evitar duplicados.
     await db.runTransaction(async tx => {
       const snap = await tx.get(ref);
 
@@ -253,62 +339,92 @@ module.exports = async function handler(req, res) {
         throw Error('La reserva no existe');
       }
 
-      const r = snap.data();
+      original = snap.data();
 
-      if (accion === 'crear' && r.googleEventId) {
+      if (original.googleInviteState === 'pending') {
         throw Error(
-          'Esta reserva ya tiene una invitación'
-        );
-      }
-
-      if (accion === 'actualizar' && !r.googleEventId) {
-        throw Error(
-          'Esta reserva no tiene invitación para actualizar'
+          'Operación pendiente de verificación. Revisá Google Calendar.'
         );
       }
 
       if (
-        accion === 'actualizar' &&
-        r.googleInviteState !== 'sent'
+        accion === 'crear' &&
+        original.googleEventId
+      ) {
+        throw Error('La invitación ya existe');
+      }
+
+      if (
+        accion !== 'crear' &&
+        (
+          !original.googleEventId ||
+          original.googleInviteState !== 'sent'
+        )
       ) {
         throw Error(
-          'El evento requiere verificación antes de actualizar'
+          'La reserva no tiene invitación confirmada'
         );
       }
 
-      if (r.googleInviteState === 'pending') {
-        throw Error(
-          'Envío pendiente de verificación en Google Calendar'
-        );
+      nuevo =
+        accion === 'modificar'
+          ? {
+              ...original,
+              ...validarCambios(cambios)
+            }
+          : original;
+
+      if (accion !== 'cancelar') {
+        payload = evento(nuevo);
       }
 
-      // Primero convertir la reserva.
-      evento = toEvent(r);
+      if (
+        accion === 'actualizar' ||
+        accion === 'modificar'
+      ) {
+        payload.eventoId = original.googleEventId;
 
-      // Después asignar el ID del evento existente.
-      if (accion === 'actualizar') {
-        evento.eventoId = r.googleEventId;
+        payload.invitados =
+          accion === 'actualizar'
+            ? correos
+            : (original.googleInvitados || []);
+      }
+
+      if (accion === 'crear') {
+        payload.invitados = correos;
+      }
+
+      if (accion === 'cancelar') {
+        payload = {
+          eventoId: original.googleEventId
+        };
       }
 
       tx.update(ref, {
         googleInviteState: 'pending',
-        googleInviteStartedAt: lock,
+
+        googleInviteStartedAt:
+          admin.firestore.FieldValue.serverTimestamp(),
+
         googleInviteStartedBy: user.uid
       });
     });
 
     let result;
 
-    // Crear o actualizar en Google Calendar.
     try {
-      result = await script({
-        accion,
-        ...evento,
-        invitados: emails
+      result = await apps({
+        accion:
+          accion === 'modificar'
+            ? 'actualizar'
+            : accion,
+
+        ...payload
       });
     } catch (e) {
       console.error(
-        'Envío incierto de reserva',
+        'Operación Google de resultado incierto:',
+        accion,
         reservaId,
         e
       );
@@ -316,54 +432,134 @@ module.exports = async function handler(req, res) {
       return fail(
         res,
         502,
-        'No se pudo confirmar el envío. Revisá Google Calendar; no vuelvas a enviarlo automáticamente.'
+        'No se pudo confirmar la operación. Revisá Google Calendar antes de reintentar; la reserva quedó protegida.'
       );
     }
 
-    if (!result.eventoId) {
+    if (
+      accion !== 'cancelar' &&
+      !result.eventoId
+    ) {
       return fail(
         res,
         502,
-        'Google no devolvió el ID del evento. Revisá Calendar antes de reintentar.'
+        'Google no devolvió el ID. Revisá Calendar antes de reintentar.'
       );
     }
 
-    // Guardar resultado en Firestore.
     try {
-      await ref.update({
-        googleEventId: result.eventoId,
+      if (accion === 'cancelar') {
+        await db.runTransaction(async tx => {
+          const snap = await tx.get(ref);
 
-        googleInvitados: emails,
+          if (!snap.exists) {
+            throw Error(
+              'Reserva desaparecida después de cancelar Google'
+            );
+          }
 
-        googleInvitacionEnviada:
-          admin.firestore.FieldValue.serverTimestamp(),
+          const mov = db
+            .collection('movimientos')
+            .doc();
 
-        googleInviteState: 'sent'
-      });
+          tx.delete(ref);
+
+          tx.set(
+            mov,
+            movimiento(
+              'eliminar',
+              reservaId,
+              snap.data(),
+              null,
+              user
+            )
+          );
+        });
+
+      } else if (accion === 'modificar') {
+        await db.runTransaction(async tx => {
+          const snap = await tx.get(ref);
+
+          if (!snap.exists) {
+            throw Error(
+              'Reserva desaparecida después de actualizar Google'
+            );
+          }
+
+          const antes = snap.data();
+
+          const mov = db
+            .collection('movimientos')
+            .doc();
+
+          tx.update(ref, {
+            ...cambios,
+
+            googleInviteState: 'sent',
+
+            modificadoPor: user.uid,
+            modificadoPorEmail:
+              user.email || '',
+
+            updatedAt:
+              admin.firestore.FieldValue.serverTimestamp()
+          });
+
+          tx.set(
+            mov,
+            movimiento(
+              'modificar',
+              reservaId,
+              antes,
+              {
+                ...antes,
+                ...cambios
+              },
+              user
+            )
+          );
+        });
+
+      } else {
+        await ref.update({
+          googleEventId: result.eventoId,
+
+          googleInvitados: correos,
+
+          googleInvitacionEnviada:
+            admin.firestore.FieldValue.serverTimestamp(),
+
+          googleInviteState: 'sent'
+        });
+      }
+
     } catch (e) {
       console.error(
-        'Evento procesado, no se guardó el resultado',
+        'Google confirmado pero Firestore falló:',
+        accion,
         reservaId,
-        result.eventoId,
         e
       );
 
       return fail(
         res,
         503,
-        'Google procesó la invitación pero no se pudo registrar. Contactá al administrador antes de reintentar.'
+        'Google confirmó el cambio, pero falló Firestore. No repitas la operación: requiere revisión administrativa.'
       );
     }
 
-    return res.status(200).json({
+    return res.json({
       ok: true,
 
-      mensaje:
-        accion === 'crear'
-          ? 'Invitación enviada correctamente'
-          : 'Invitación actualizada correctamente',
+      mensaje: {
+        crear: 'Invitación enviada',
+        actualizar: 'Destinatarios actualizados',
+        modificar: 'Reserva e invitación actualizadas',
+        cancelar:
+          'Invitación cancelada y reserva eliminada'
+      }[accion],
 
-      eventoId: result.eventoId
+      eventoId: result.eventoId || null
     });
 
   } catch (e) {
@@ -372,7 +568,7 @@ module.exports = async function handler(req, res) {
     return fail(
       res,
       400,
-      e.message || 'Error al procesar la invitación'
+      e.message || 'Error al procesar la operación'
     );
   }
 };
