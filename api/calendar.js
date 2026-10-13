@@ -1,310 +1,362 @@
 
-const admin = require("firebase-admin");
+const admin = require('firebase-admin');
 
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n")
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
     })
   });
 }
 
 const db = admin.firestore();
 
-function responder(res, codigo, datos) {
-  return res.status(codigo).json(datos);
-}
+const fail = (res, status, error) =>
+  res.status(status).json({ ok: false, error });
 
-function obtenerFecha(valor) {
-  if (typeof valor === "string") {
-    const fecha = valor.match(/^\d{4}-\d{2}-\d{2}/);
-    if (fecha) return fecha[0];
-  }
-  if (valor && typeof valor.toDate === "function") {
-    const d = valor.toDate();
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Argentina/Buenos_Aires",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    }).format(d);
-  }
-  throw new Error("No se pudo interpretar la fecha de la reserva");
-}
+const validEmail = x =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x);
 
-function obtenerHora(valor, minutos) {
-  if (typeof valor === "number" && Number.isInteger(valor)) {
-    return `${String(valor).padStart(2, "0")}:${String(minutos || 0).padStart(2, "0")}`;
+// Convertir una reserva de Firestore a un evento de Google Calendar.
+function toEvent(r) {
+  if (
+    typeof r.fecha !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(r.fecha)
+  ) {
+    throw Error('Fecha de reserva inválida');
   }
 
-  if (typeof valor === "string") {
-    if (/^\d{1,2}:\d{2}$/.test(valor)) return valor;
-    if (/^\d{1,2}$/.test(valor)) {
-      return `${valor.padStart(2, "0")}:${String(minutos || 0).padStart(2, "0")}`;
+  function hora(o) {
+    if (
+      !o ||
+      !Number.isInteger(o.hour) ||
+      !Number.isInteger(o.minute) ||
+      o.hour < 0 ||
+      o.hour > 23 ||
+      o.minute < 0 ||
+      o.minute > 59
+    ) {
+      throw Error('Horario de reserva inválido');
     }
+
+    return (
+      String(o.hour).padStart(2, '0') +
+      ':' +
+      String(o.minute).padStart(2, '0')
+    );
   }
 
-  throw new Error("No se pudo interpretar el horario de la reserva");
-}
+  const inicio =
+    `${r.fecha}T${hora(r.inicio)}:00-03:00`;
 
-function datosEvento(reserva) {
-  const fecha = obtenerFecha(reserva.fecha);
-
-  const horaInicio = obtenerHora(
-    reserva.sh ?? reserva.horaInicio ?? reserva.inicio,
-    reserva.sm
-  );
-
-  const horaFin = obtenerHora(
-    reserva.eh ?? reserva.horaFin ?? reserva.fin,
-    reserva.em
-  );
-
-  const inicio = `${fecha}T${horaInicio}:00-03:00`;
-  const fin = `${fecha}T${horaFin}:00-03:00`;
+  const fin =
+    `${r.fecha}T${hora(r.fin)}:00-03:00`;
 
   if (
     !Number.isFinite(Date.parse(inicio)) ||
-    !Number.isFinite(Date.parse(fin)) ||
     Date.parse(fin) <= Date.parse(inicio)
   ) {
-    throw new Error("La reserva tiene fechas u horarios inválidos");
+    throw Error('Rango horario inválido');
   }
 
   return {
-    titulo: String(reserva.titulo || "Reserva de laboratorio"),
+    titulo: String(
+      r.titulo || 'Reserva de laboratorio'
+    ).slice(0, 250),
+
     inicio,
     fin,
-    ubicacion: String(reserva.lab || reserva.laboratorio || ""),
-    descripcion: "Reserva realizada desde el sistema de laboratorios."
+
+    ubicacion: String(r.laboratorio || ''),
+
+    descripcion: 'Reserva del Centro de Simulación'
   };
 }
 
-async function llamarAppsScript(datos) {
+// Comunicación segura con Google Apps Script.
+async function script(payload) {
   const url = process.env.APPS_SCRIPT_URL;
   const secret = process.env.APPS_SCRIPT_SECRET;
 
-  if (!url || !secret) {
-    throw new Error("Falta configurar Google Apps Script");
+  if (
+    !url ||
+    !secret ||
+    !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)
+  ) {
+    throw Error('Configuración de Apps Script inválida');
   }
 
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) {
-    throw new Error("URL de Apps Script inválida");
-  }
+  const response = await fetch(url, {
+    method: 'POST',
 
-  const respuesta = await fetch(url, {
-    method: "POST",
     headers: {
-      "Content-Type": "text/plain;charset=utf-8"
+      'Content-Type': 'text/plain;charset=utf-8'
     },
+
     body: JSON.stringify({
-      ...datos,
+      ...payload,
       secret
     }),
-    redirect: "follow",
+
+    redirect: 'follow',
+
     signal: AbortSignal.timeout(25000)
   });
 
-  if (!respuesta.ok) {
-    throw new Error("Google Apps Script no respondió correctamente");
+  if (!response.ok) {
+    throw Error(
+      'Google Apps Script no respondió correctamente'
+    );
   }
 
-  let resultado;
+  let result;
 
   try {
-    resultado = JSON.parse(await respuesta.text());
-  } catch (_) {
-    throw new Error("Google Apps Script no devolvió JSON");
+    result = JSON.parse(await response.text());
+  } catch {
+    throw Error('Apps Script no devolvió JSON');
   }
 
-  if (resultado.ok !== true) {
-    throw new Error(resultado.error || "Google rechazó la operación");
+  if (result.ok !== true) {
+    throw Error(
+      result.error || 'Apps Script rechazó la operación'
+    );
   }
 
-  return resultado;
+  return result;
 }
 
+// API principal.
 module.exports = async function handler(req, res) {
-  res.setHeader("Cache-Control", "no-store");
+  res.setHeader('Cache-Control', 'no-store');
 
-  if (req.method !== "POST") {
-    return responder(res, 405, {
-      error: "Método no permitido"
-    });
+  if (req.method !== 'POST') {
+    return fail(res, 405, 'Método no permitido');
   }
 
-  const authorization = req.headers.authorization || "";
+  const auth = req.headers.authorization || '';
 
-  if (!authorization.startsWith("Bearer ")) {
-    return responder(res, 401, {
-      error: "Falta autenticación"
-    });
+  if (!auth.startsWith('Bearer ')) {
+    return fail(res, 401, 'Falta autenticación');
   }
 
-  let usuario;
+  let user;
 
   try {
-    usuario = await admin.auth().verifyIdToken(
-      authorization.slice(7),
+    user = await admin.auth().verifyIdToken(
+      auth.slice(7),
       true
     );
-  } catch (_) {
-    return responder(res, 401, {
-      error: "Sesión inválida o vencida"
-    });
+  } catch {
+    return fail(
+      res,
+      401,
+      'Sesión inválida o vencida'
+    );
   }
 
   try {
-    const perfil = await db.collection("usuarios")
-      .doc(usuario.uid)
+    // Verificar permisos de administrador.
+    const profile = await db
+      .collection('usuarios')
+      .doc(user.uid)
       .get();
 
-    if (!perfil.exists || perfil.data().rol !== "admin") {
-      return responder(res, 403, {
-        error: "Solo los administradores pueden enviar invitaciones"
-      });
+    if (
+      !profile.exists ||
+      profile.data().rol !== 'admin'
+    ) {
+      return fail(
+        res,
+        403,
+        'Solo administradores'
+      );
     }
 
-    const { accion = "prueba", reservaId, invitados } = req.body || {};
+    const {
+      accion = 'prueba',
+      reservaId,
+      invitados
+    } = req.body || {};
 
-    if (accion === "prueba") {
-      const resultado = await llamarAppsScript({
-        accion: "prueba"
-      });
+    // Mantener la prueba de conexión.
+    if (accion === 'prueba') {
+      await script({ accion: 'prueba' });
 
-      return responder(res, 200, {
+      return res.status(200).json({
         ok: true,
-        mensaje: resultado.mensaje || "Conexión correcta"
+        mensaje:
+          'Conexión segura con Google Apps Script correcta'
       });
     }
 
-    if (accion !== "crear") {
-      return responder(res, 400, {
-        error: "Acción no habilitada todavía"
-      });
+    // Por ahora, solamente habilitamos crear invitaciones.
+    if (accion !== 'crear') {
+      return fail(
+        res,
+        400,
+        'Acción todavía no habilitada'
+      );
     }
 
-    if (typeof reservaId !== "string" || !reservaId.trim()) {
-      return responder(res, 400, {
-        error: "Falta identificar la reserva"
-      });
+    // Validar la reserva.
+    if (
+      typeof reservaId !== 'string' ||
+      !/^[\w-]{1,200}$/.test(reservaId)
+    ) {
+      return fail(
+        res,
+        400,
+        'Reserva inválida'
+      );
     }
 
+    // Validar destinatarios.
     if (
       !Array.isArray(invitados) ||
-      invitados.length === 0 ||
-      invitados.length > 50
+      invitados.length < 1 ||
+      invitados.length > 50 ||
+      invitados.some(x => typeof x !== 'string')
     ) {
-      return responder(res, 400, {
-        error: "Seleccioná entre 1 y 50 destinatarios"
-      });
+      return fail(
+        res,
+        400,
+        'Destinatarios inválidos'
+      );
     }
 
-    const correos = [
+    const emails = [
       ...new Set(
-        invitados.map(x => String(x).trim().toLowerCase())
+        invitados.map(x =>
+          x.trim().toLowerCase()
+        )
       )
     ];
 
-    if (correos.some(x => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x))) {
-      return responder(res, 400, {
-        error: "Hay correos electrónicos inválidos"
-      });
+    if (emails.some(x => !validEmail(x))) {
+      return fail(
+        res,
+        400,
+        'Hay correos inválidos'
+      );
     }
 
-    const referencia = db.collection("reservas").doc(reservaId);
-    const reservaDoc = await referencia.get();
+    // Buscar la reserva real en Firestore.
+    const ref = db
+      .collection('reservas')
+      .doc(reservaId);
 
-    if (!reservaDoc.exists) {
-      return responder(res, 404, {
-        error: "La reserva no existe"
-      });
-    }
+    const lock =
+      admin.firestore.FieldValue.serverTimestamp();
 
-    const reserva = reservaDoc.data();
+    let evento;
 
-    if (reserva.googleEventId) {
-      return responder(res, 409, {
-        error: "Esta reserva ya tiene una invitación de Google Calendar"
-      });
-    }
-
-    const evento = datosEvento(reserva);
-
-    // Bloqueo temporal para impedir envíos simultáneos.
-    const bloqueoId = `${usuario.uid}-${Date.now()}`;
-    const ahora = Date.now();
-
+    // Impedir que se envíe dos veces.
     await db.runTransaction(async tx => {
-      const actual = await tx.get(referencia);
+      const snap = await tx.get(ref);
 
-      if (!actual.exists) {
-        throw new Error("La reserva ya no existe");
+      if (!snap.exists) {
+        throw Error('La reserva no existe');
       }
 
-      const datos = actual.data();
+      const r = snap.data();
 
-      if (datos.googleEventId) {
-        throw new Error("La invitación ya fue enviada");
+      if (r.googleEventId) {
+        throw Error(
+          'Esta reserva ya tiene una invitación'
+        );
       }
 
-      if (
-        datos.googleInviteLock &&
-        datos.googleInviteLock.expiresAt > ahora
-      ) {
-        throw new Error("Ya hay un envío en proceso");
+      // Si hubo un envío incierto, se requiere
+      // verificación antes de volver a intentar.
+      if (r.googleInviteState === 'pending') {
+        throw Error(
+          'Envío pendiente de verificación en Google Calendar'
+        );
       }
 
-      tx.update(referencia, {
-        googleInviteLock: {
-          id: bloqueoId,
-          expiresAt: ahora + 120000
-        }
+      evento = toEvent(r);
+
+      tx.update(ref, {
+        googleInviteState: 'pending',
+        googleInviteStartedAt: lock,
+        googleInviteStartedBy: user.uid
       });
     });
 
+    let result;
+
+    // Crear la invitación en Google Calendar.
     try {
-      const resultado = await llamarAppsScript({
-        accion: "crear",
+      result = await script({
+        accion: 'crear',
         ...evento,
-        invitados: correos
+        invitados: emails
       });
+    } catch (e) {
+      console.error(
+        'Envío incierto de reserva',
+        reservaId,
+        e
+      );
 
-      if (!resultado.eventoId) {
-        throw new Error("Google no devolvió el identificador del evento");
-      }
-
-      await referencia.update({
-        googleEventId: resultado.eventoId,
-        googleInvitados: correos,
-        googleInvitacionEnviada: admin.firestore.FieldValue.serverTimestamp(),
-        googleInviteLock: admin.firestore.FieldValue.delete()
-      });
-
-      return responder(res, 200, {
-        ok: true,
-        mensaje: "Invitación enviada correctamente",
-        eventoId: resultado.eventoId
-      });
-
-    } catch (error) {
-      // Si Google creó el evento pero falló la respuesta,
-      // no reintentar automáticamente: podría duplicarlo.
-      console.error("Error de invitación:", error.message);
-
-      return responder(res, 502, {
-        error: error.message,
-        advertencia: "Verificá Google Calendar antes de intentar nuevamente."
-      });
+      return fail(
+        res,
+        502,
+        'No se pudo confirmar el envío. Revisá Google Calendar; no vuelvas a enviarlo automáticamente.'
+      );
     }
 
-  } catch (error) {
-    console.error("Error de Calendar:", error.message);
+    if (!result.eventoId) {
+      return fail(
+        res,
+        502,
+        'Google no devolvió el ID del evento. Revisá Calendar antes de reintentar.'
+      );
+    }
 
-    return responder(res, 400, {
-      error: error.message || "No se pudo procesar la solicitud"
+    // Guardar el ID del evento en la reserva.
+    try {
+      await ref.update({
+        googleEventId: result.eventoId,
+
+        googleInvitados: emails,
+
+        googleInvitacionEnviada:
+          admin.firestore.FieldValue.serverTimestamp(),
+
+        googleInviteState: 'sent'
+      });
+    } catch (e) {
+      console.error(
+        'Evento creado, no se guardó ID',
+        reservaId,
+        result.eventoId,
+        e
+      );
+
+      return fail(
+        res,
+        503,
+        'Google creó la invitación pero no se pudo registrar. Contactá al administrador antes de reintentar.'
+      );
+    }
+
+    return res.status(200).json({
+      ok: true,
+      mensaje: 'Invitación enviada correctamente',
+      eventoId: result.eventoId
     });
+
+  } catch (e) {
+    console.error('Calendar API:', e);
+
+    return fail(
+      res,
+      400,
+      e.message || 'Error al procesar la invitación'
+    );
   }
 };
