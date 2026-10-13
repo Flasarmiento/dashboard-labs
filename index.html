@@ -250,14 +250,14 @@ body {
     height: 30px; position: relative;
 }
 #calendarTable th {
-    background: #FFCC00; color: #153244; position: sticky; top: 0; z-index: 10;
+    background: #FFCC00; color: #153244; position: relative; z-index: 1;
     font-weight: 600; padding: 6px 3px; font-size: 0.72rem;
     height: 38px; cursor: pointer;
     white-space: normal; word-break: break-word; line-height: 1.1;
 }
 #calendarTable th:first-child {
     background: #153244; color: #FFCC00; width: 78px;
-    position: sticky; left: 0; z-index: 20; cursor: default;
+    position: sticky; left: 0; z-index: 13; cursor: default;
 }
 #calendarTable td {
     background: white; transition: background 0.15s; cursor: pointer;
@@ -588,7 +588,7 @@ body {
    <label>Desde<input id="editarInicio" type="time" style="display:block;padding:10px;margin-top:5px"></label>
    <label>Hasta<input id="editarFin" type="time" style="display:block;padding:10px;margin-top:5px"></label>
   </div>
-  <p style="font-size:.82rem;color:#666">La fecha permanece fija. Si existe una invitación, se actualizará el evento original en Google Calendar.</p>
+  <p style="font-size:.82rem;color:#666">La fecha permanece fija. La invitación de Google Calendar se mantiene. Cambiar el docente responsable no modifica automáticamente la lista de invitados.</p>
   <div id="editarEstado" role="status" style="white-space:pre-wrap;font-size:.85rem"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="editarCancelar">Cancelar</button><button class="btn" id="editarGuardar" style="background:#21855c">Guardar cambios</button></div>
  </div>
@@ -1011,16 +1011,35 @@ async function loadAdminPanel() {
     try{
         const snap=await db.collection('usuarios').get();
         destino.replaceChildren();
+        const filtro=document.createElement('select');
+        [['todos','Todos los usuarios'],['docentes','Solo docentes'],['otros','No docentes']].forEach(([v,t])=>{const op=document.createElement('option');op.value=v;op.textContent=t;filtro.append(op);});
+        filtro.value=window.filtroAdminDocentes||'todos';
+        filtro.onchange=()=>{window.filtroAdminDocentes=filtro.value;loadAdminPanel();};
+        const barra=document.createElement('div');barra.style='display:flex;gap:12px;align-items:center;margin-bottom:12px';
+        const etiqueta=document.createElement('strong');etiqueta.textContent='Mostrar:';barra.append(etiqueta,filtro);destino.append(barra);
         const tabla=document.createElement('table');tabla.className='admin-table';
         const cab=document.createElement('tr');
-        ['Email','Nombre','Rol','Estado','Acciones'].forEach(x=>{const th=document.createElement('th');th.textContent=x;cab.append(th);});
+        ['Email','Nombre','Rol','Docente','Estado','Acciones'].forEach(x=>{const th=document.createElement('th');th.textContent=x;cab.append(th);});
         tabla.append(cab);
         snap.forEach(doc=>{
-            const u=doc.data(),fila=document.createElement('tr');
+            const u=doc.data();
+            if(window.filtroAdminDocentes==='docentes' && u.esDocente!==true)return;
+            if(window.filtroAdminDocentes==='otros' && u.esDocente===true)return;
+            const fila=document.createElement('tr');
             const celda=t=>{const td=document.createElement('td');td.textContent=t;fila.append(td);return td;};
             celda(u.email||'—');celda(u.nombre||'—');
             const rol=celda('');const sel=document.createElement('select');
             ['user','admin'].forEach(v=>{const op=document.createElement('option');op.value=v;op.textContent=v;op.selected=u.rol===v;sel.append(op);});rol.append(sel);
+            const celdaDocente=celda('');
+            const check=document.createElement('input');check.type='checkbox';check.checked=u.esDocente===true;
+            check.title='Marcar si integra el plantel docente (no cambia su rol ni su acceso)';
+            check.setAttribute('aria-label','Es docente: '+(u.nombre||u.email||''));
+            check.onchange=async()=>{
+                check.disabled=true;
+                try {await db.collection('usuarios').doc(doc.id).update({esDocente:check.checked});await loadAdminPanel();}
+                catch(e){check.checked=!check.checked;check.disabled=false;alert('No se pudo cambiar la condición docente: '+e.message);}
+            };
+            celdaDocente.append(check);
             celda(u.activo===false?'Desactivado':'Activo');
             const acciones=celda('');
             const boton=(texto,fn)=>{const b=document.createElement('button');b.textContent=texto;b.style.margin='3px';b.onclick=fn;acciones.append(b);};
@@ -1177,7 +1196,7 @@ let docentesCache = [];
 async function cargarDocentes() {
     const snap = await db.collection('usuarios').get();
     docentesCache = snap.docs.map(d => ({uid:d.id, ...d.data()}))
-        .filter(d => d.activo !== false)
+        .filter(d => d.activo !== false && d.esDocente === true)
         .map(d => ({uid:d.uid, email:String(d.email||'').toLowerCase(), nombre:String(d.nombre||d.displayName||d.name||d.email||'Sin nombre')}))
         .sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
     return docentesCache;
@@ -1428,7 +1447,6 @@ document.getElementById('editarGuardar').onclick = async () => {
         const docenteUid=document.getElementById('editarDocente').value;
         const cambios = {titulo, laboratorio, inicio, fin};
         if((actual.docenteUid||'')!==docenteUid) {
-            if(actual.googleEventId)throw new Error('Para cambiar el docente de una reserva con invitación, primero hay que habilitar ese campo en api/calendar.js. No se guardó ningún cambio.');
             Object.assign(cambios,datosDocente(docenteUid));
         }
         if (actual.titulo === titulo && actual.laboratorio === laboratorio &&
