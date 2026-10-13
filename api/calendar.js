@@ -282,9 +282,10 @@ module.exports = async function handler(req, res) {
         );
       }
 
+      // Primero convertir la reserva.
       evento = toEvent(r);
 
-      // Si existe, utilizar el mismo evento de Google.
+      // Después asignar el ID del evento existente.
       if (accion === 'actualizar') {
         evento.eventoId = r.googleEventId;
       }
