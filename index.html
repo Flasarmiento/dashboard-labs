@@ -294,15 +294,17 @@ body {
 }
 .event-block .edit-controls {
     position: absolute; top: 1px; right: 1px;
-    display: none; gap: 1px; z-index: 15;
+    display: none; gap: 3px; z-index: 15; flex-wrap: wrap; max-width: 100%;
 }
 .event-block:hover .edit-controls { display: flex; }
 .edit-btn, .delete-btn, .time-btn {
     background: rgba(0,0,0,0.5); border: none; color: white;
-    width: 15px; height: 15px; border-radius: 2px; font-size: 9px;
+    min-width: 28px; height: 28px; padding: 0 4px; border-radius: 6px; font-size: 15px;
     cursor: pointer; display: flex; align-items: center; justify-content: center;
     backdrop-filter: blur(2px);
 }
+.edit-btn:focus-visible, .delete-btn:focus-visible, .time-btn:focus-visible { outline: 2px solid #FFCC00; }
+
 .edit-btn:hover, .delete-btn:hover, .time-btn:hover { background: rgba(0,0,0,0.75); }
 
 /* === MODAL GENÉRICO === */
@@ -552,6 +554,23 @@ body {
  </div>
 </div>
 
+
+<!-- EDICIÓN DE RESERVA EXISTENTE -->
+<div id="editarReservaModal" class="modal-overlay" style="z-index:22500">
+ <div class="modal-box" style="width:95%;max-width:570px;max-height:90vh;overflow:auto;gap:14px">
+  <div class="modal-header"><h3>✏️ Modificar reserva</h3><button class="modal-close-btn" id="editarCerrar" title="Cerrar">✕</button></div>
+  <label>Actividad<input id="editarTitulo" style="display:block;width:100%;padding:10px;margin-top:5px"></label>
+  <label>Laboratorio<select id="editarLab" style="display:block;width:100%;padding:10px;margin-top:5px"></select></label>
+  <label>Fecha<input id="editarFecha" type="date" disabled style="display:block;width:100%;padding:10px;margin-top:5px"></label>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+   <label>Desde<input id="editarInicio" type="time" style="display:block;padding:10px;margin-top:5px"></label>
+   <label>Hasta<input id="editarFin" type="time" style="display:block;padding:10px;margin-top:5px"></label>
+  </div>
+  <p style="font-size:.82rem;color:#666">La fecha permanece fija. Si existe una invitación, se actualizará el evento original en Google Calendar.</p>
+  <div id="editarEstado" role="status" style="white-space:pre-wrap;font-size:.85rem"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="editarCancelar">Cancelar</button><button class="btn" id="editarGuardar" style="background:#21855c">Guardar cambios</button></div>
+ </div>
+</div>
 
 <!-- INVITACIONES DE GOOGLE CALENDAR -->
 <div id="invitacionModal" class="modal-overlay" style="z-index:23000">
@@ -1247,7 +1266,7 @@ async function recAccionSerie(eventId,accion,data){
         if(!docs.length)return;
         if(docs.some(d=>d.data().googleInviteState==='pending'))throw new Error('Hay invitaciones pendientes de verificación. Revisá Google Calendar.');
         if(accion==='eliminar'&&!confirm(`¿Eliminar ${docs.length} reserva(s)? Se cancelarán también sus invitaciones de Google Calendar.`))return;
-        if(accion==='modificar'&&docs.length>1&&(data.laboratorio||data.inicio||data.fin)){
+        if(accion==='modificar'&&(data.laboratorio||data.inicio||data.fin)){
             const ids=docs.map(d=>d.id);
             for(const d of docs){
                 const r=d.data(),lab=data.laboratorio||r.laboratorio,inicio=data.inicio||r.inicio,fin=data.fin||r.fin;
@@ -1267,7 +1286,8 @@ async function recAccionSerie(eventId,accion,data){
             procesadas++;
         }
         if(docs.length>1)alert(`Operación completada: ${procesadas} de ${docs.length} reservas.`);
-    }catch(e){console.error(e);alert('No se pudo completar la operación: '+e.message+'\nSi era una serie, algunas fechas podrían haberse procesado. Revisá el calendario antes de repetir.');}
+        return true;
+    }catch(e){console.error(e);alert('No se pudo completar la operación: '+e.message+'\nSi era una serie, algunas fechas podrían haberse procesado. Revisá el calendario antes de repetir.');return false;}
 }
 
 async function createSingleEvent(lab,hour,half){
@@ -1278,31 +1298,76 @@ async function createRangeEvent(lab,sh,sm,eh,em,durationMin){
  recAbrir(getCurrentDateKey(),lab,'',sh,sm,eh,em);
 }
 
-async function editEvent(dateKey, lab, eventId) {
-    const ev = events[dateKey]?.[lab]?.[eventId] || monthEvents[dateKey]?.[lab]?.[eventId];
-    if (!ev) return;
-    const newTitle = prompt("Editar título:", ev.title);
-    if (newTitle && newTitle !== ev.title) {
-        await recAccionSerie(eventId, 'modificar', { titulo: newTitle });
-    }
+let editarReservaId = null;
+function cerrarEditor() {
+    document.getElementById('editarReservaModal').classList.remove('visible');
+    editarReservaId = null;
 }
-
-async function adjustEventTime(dateKey, lab, eventId, ev) {
-    const newStart = prompt("Hora de inicio (ej: 9:30):",  `${ev.startHour}:${String(ev.startMinute||0).padStart(2,'0')}`);
-    const newEnd   = prompt("Hora de fin   (ej: 12:30):", `${ev.endHour}:${String(ev.endMinute||0).padStart(2,'0')}`);
-    if (!newStart || !newEnd) return;
-
-    const [sh, sm] = newStart.split(':').map(Number);
-    const [eh, em] = newEnd.split(':').map(Number);
-    if ([sh, sm, eh, em].some(isNaN)) { alert("Formato de hora inválido."); return; }
-    if (sh * 60 + sm >= eh * 60 + em)  { alert("La hora de fin debe ser posterior a la de inicio."); return; }
-    if (hasOverlap(dateKey, lab, sh, sm||0, eh, em||0, eventId)) {
-        alert("❌ Superposición con otro evento."); return;
-    }
-    await recAccionSerie(eventId, 'modificar', {
-        inicio: { hour: sh, minute: sm || 0 },
-        fin:    { hour: eh, minute: em || 0 }
-    });
+document.getElementById('editarCerrar').onclick = cerrarEditor;
+document.getElementById('editarCancelar').onclick = cerrarEditor;
+async function editEvent(dateKey, lab, eventId) {
+    if (!isAdmin) return;
+    const estado = document.getElementById('editarEstado');
+    estado.textContent = 'Cargando reserva...';
+    try {
+        const snap = await db.collection('reservas').doc(eventId).get();
+        if (!snap.exists) throw new Error('La reserva ya no existe.');
+        const r = snap.data();
+        editarReservaId = eventId;
+        document.getElementById('editarTitulo').value = r.titulo || '';
+        const selector = document.getElementById('editarLab');
+        selector.replaceChildren();
+        labs.forEach(nombre => {
+            const o = document.createElement('option');
+            o.value = nombre; o.textContent = nombre; selector.append(o);
+        });
+        selector.value = r.laboratorio;
+        document.getElementById('editarFecha').value = r.fecha;
+        const formato = t => `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')}`;
+        document.getElementById('editarInicio').value = formato(r.inicio);
+        document.getElementById('editarFin').value = formato(r.fin);
+        estado.textContent = '';
+        document.getElementById('editarReservaModal').classList.add('visible');
+    } catch(e) { console.error(e); alert('No se pudo abrir la reserva: ' + e.message); }
+}
+document.getElementById('editarGuardar').onclick = async () => {
+    if (!editarReservaId) return;
+    const btn = document.getElementById('editarGuardar');
+    const estado = document.getElementById('editarEstado');
+    try {
+        const titulo = document.getElementById('editarTitulo').value.trim();
+        const laboratorio = document.getElementById('editarLab').value;
+        const inicio = recHora(document.getElementById('editarInicio').value);
+        const fin = recHora(document.getElementById('editarFin').value);
+        if (!titulo) throw new Error('Ingresá el nombre de la actividad.');
+        if (recMin(inicio) < 480 || recMin(fin) > 1320 || recMin(inicio) >= recMin(fin))
+            throw new Error('El horario debe estar entre las 08:00 y las 22:00.');
+        const snap = await db.collection('reservas').doc(editarReservaId).get();
+        if (!snap.exists) throw new Error('La reserva ya no existe.');
+        const actual = snap.data();
+        const cambios = {titulo, laboratorio, inicio, fin};
+        if (actual.titulo === titulo && actual.laboratorio === laboratorio &&
+            recMin(actual.inicio) === recMin(inicio) && recMin(actual.fin) === recMin(fin)) {
+            cerrarEditor(); return;
+        }
+        btn.disabled = true;
+        estado.textContent = 'Comprobando disponibilidad...';
+        const ocupadas = await recComprobarFechas([actual.fecha],laboratorio,inicio,fin,[editarReservaId]);
+        if (ocupadas.length) throw new Error('El laboratorio está ocupado en ese horario.');
+        estado.textContent = 'Guardando y sincronizando con Google Calendar...';
+        // La función existente pregunta si modificar esta fecha o toda la serie.
+        // Si Google no confirma el cambio, el backend no modifica la reserva.
+        const completado = await recAccionSerie(editarReservaId,'modificar',cambios);
+        if (completado) cerrarEditor();
+        else estado.textContent = 'No se aplicaron todos los cambios. Revisá el calendario antes de reintentar.';
+    } catch(e) {
+        console.error(e);
+        estado.textContent = 'Error: ' + e.message;
+    } finally { btn.disabled = false; }
+};
+async function adjustEventTime(dateKey, lab, eventId) {
+    // El reloj y el lápiz abren el mismo formulario de edición real.
+    await editEvent(dateKey, lab, eventId);
 }
 
 async function deleteEvent(dateKey, lab, eventId) {
@@ -1469,22 +1534,22 @@ function renderDayView() {
                 controls.className = "edit-controls";
 
                 const editBtn = document.createElement("button");
-                editBtn.className = "edit-btn"; editBtn.innerHTML = "✏️";
+                editBtn.className = "edit-btn"; editBtn.innerHTML = "✏️"; editBtn.title = "Modificar reserva"; editBtn.setAttribute("aria-label","Modificar reserva");
                 editBtn.onclick = e => { e.stopPropagation(); editEvent(dateKey, lab, event.id); };
 
                 const timeBtn = document.createElement("button");
-                timeBtn.className = "time-btn"; timeBtn.innerHTML = "⏱️";
+                timeBtn.className = "time-btn"; timeBtn.innerHTML = "⏱️"; timeBtn.title = "Modificar horario"; timeBtn.setAttribute("aria-label","Modificar horario");
                 timeBtn.onclick = e => { e.stopPropagation(); adjustEventTime(dateKey, lab, event.id, event); };
 
                 const delBtn = document.createElement("button");
-                delBtn.className = "delete-btn"; delBtn.innerHTML = "🗑️";
+                delBtn.className = "delete-btn"; delBtn.innerHTML = "🗑️"; delBtn.title = "Eliminar reserva"; delBtn.setAttribute("aria-label","Eliminar reserva");
                 delBtn.onclick = e => { e.stopPropagation(); deleteEvent(dateKey, lab, event.id); };
 
                 const inviteBtn = document.createElement("button");
                 inviteBtn.className = "edit-btn";
                 inviteBtn.title = "Enviar invitación de Google Calendar";
                 inviteBtn.textContent = "✉";
-                inviteBtn.style.width = "20px";
+                inviteBtn.style.minWidth = "28px"; inviteBtn.setAttribute("aria-label","Enviar o actualizar invitación de Google Calendar");
                 inviteBtn.onclick = e => { e.stopPropagation(); abrirInvitacion(event.id); };
                 controls.append(editBtn, timeBtn, delBtn, inviteBtn);
                 block.append(titleDiv, timeDiv, controls);
