@@ -479,6 +479,7 @@ body {
       <button class="btn" id="btnRecurrente" style="background:#21855c;display:none">📅 Reserva repetida</button>
        <button class="btn" id="rangeModeBtn">📏 Modo Rango</button>
       <button class="btn" id="btnHorarios">👨‍🏫 Horarios</button>
+      <button class="btn" id="btnDisponibilidad" style="background:#246c80">🔎 Disponibilidad docente</button>
       <button class="btn" id="btnLimpiar" style="display: none;">🧹 Limpiar día</button>
       <button class="btn" id="btnAdminUsers" style="display:none;">👥 Usuarios</button>
         <button class="btn" id="btnMovimientos" style="display:none;background:#2c3e50;">📜 Movimientos</button>
@@ -536,6 +537,7 @@ body {
  <div class="modal-box" style="width:95%;max-width:650px;max-height:90vh;overflow:auto;gap:12px">
   <div class="modal-header"><h3>📅 Nueva reserva / Repetición</h3><button class="modal-close-btn" id="recCerrar">✕</button></div>
   <label>Actividad <input id="recTitulo" style="width:100%;padding:9px" placeholder="Nombre de la actividad"></label>
+  <label>Docente responsable <select id="recDocente" style="width:100%;padding:9px"><option value="">Seleccionar docente (opcional)</option></select></label>
   <label>Espacio <select id="recLab" style="width:100%;padding:9px"></select></label>
   <div style="display:flex;gap:10px;flex-wrap:wrap"><label>Primera fecha <input type="date" id="recFecha"></label><label>Desde <input type="time" id="recInicio" step="1800"></label><label>Hasta <input type="time" id="recFin" step="1800"></label></div>
   <label>Repetición <select id="recTipo" style="padding:9px;width:100%"><option value="una">Una sola vez</option><option value="semanas">Semanal / varios días de la semana</option><option value="fechas">Fechas específicas (no consecutivas)</option></select></label>
@@ -555,11 +557,27 @@ body {
 </div>
 
 
+<!-- CONSULTA DE DISPONIBILIDAD DOCENTE -->
+<div id="disponibilidadModal" class="modal-overlay" style="z-index:24000">
+ <div class="modal-box" style="width:95%;max-width:850px;max-height:90vh;overflow:auto;gap:12px">
+  <div class="modal-header"><h3>🔎 Disponibilidad docente</h3><button class="modal-close-btn" id="dispCerrar" title="Cerrar">✕</button></div>
+  <p style="font-size:.85rem;color:#445">Consultá las reservas del docente y los laboratorios libres. Las reservas antiguas sin docente asignado no se atribuyen automáticamente.</p>
+  <label>Docente <select id="dispDocente" style="width:100%;padding:10px"><option value="">Seleccionar docente</option></select></label>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
+   <label>Desde <input id="dispFecha" type="date" style="display:block;padding:9px"></label>
+   <label>Período <select id="dispPeriodo" style="display:block;padding:9px"><option value="1">Solo ese día</option><option value="15" selected>Próximos 15 días</option></select></label>
+   <button class="btn" id="dispBuscar">Consultar agenda</button>
+  </div>
+  <div id="dispResultado" role="status" style="font-size:.9rem;white-space:pre-wrap"></div>
+ </div>
+</div>
+
 <!-- EDICIÓN DE RESERVA EXISTENTE -->
 <div id="editarReservaModal" class="modal-overlay" style="z-index:22500">
  <div class="modal-box" style="width:95%;max-width:570px;max-height:90vh;overflow:auto;gap:14px">
   <div class="modal-header"><h3>✏️ Modificar reserva</h3><button class="modal-close-btn" id="editarCerrar" title="Cerrar">✕</button></div>
   <label>Actividad<input id="editarTitulo" style="display:block;width:100%;padding:10px;margin-top:5px"></label>
+  <label>Docente responsable<select id="editarDocente" style="display:block;width:100%;padding:10px;margin-top:5px"><option value="">Sin docente asignado</option></select></label>
   <label>Laboratorio<select id="editarLab" style="display:block;width:100%;padding:10px;margin-top:5px"></select></label>
   <label>Fecha<input id="editarFecha" type="date" disabled style="display:block;width:100%;padding:10px;margin-top:5px"></label>
   <div style="display:flex;gap:12px;flex-wrap:wrap">
@@ -1151,13 +1169,53 @@ function recPintarExtras() {
         boton.onclick=()=>{recExtras.delete(fecha);recPintarExtras();}; fila.appendChild(boton); destino.appendChild(fila);
     });
 }
+let docentesCache = [];
+async function cargarDocentes() {
+    const snap = await db.collection('usuarios').get();
+    docentesCache = snap.docs.map(d => ({uid:d.id, ...d.data()}))
+        .filter(d => d.activo !== false)
+        .map(d => ({uid:d.uid, email:String(d.email||'').toLowerCase(), nombre:String(d.nombre||d.displayName||d.name||d.email||'Sin nombre')}))
+        .sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+    return docentesCache;
+}
+async function completarSelectorDocente(id, seleccionado='') {
+    const select=document.getElementById(id);
+    select.replaceChildren();
+    const vacio=document.createElement('option');vacio.value='';vacio.textContent='Sin docente asignado';select.appendChild(vacio);
+    const docentes=await cargarDocentes();
+    docentes.forEach(d=>{const o=document.createElement('option');o.value=d.uid;o.textContent=`${d.nombre} (${d.email})`;select.appendChild(o)});
+    if(seleccionado && !docentes.some(d=>d.uid===seleccionado)) {
+        const o=document.createElement('option');o.value=seleccionado;o.textContent='Docente anterior (cuenta inactiva)';select.appendChild(o);
+    }
+    select.value=seleccionado||'';
+}
+function datosDocente(uid) {
+    const d=docentesCache.find(x=>x.uid===uid);
+    return uid && d ? {docenteUid:d.uid,docenteNombre:d.nombre,docenteEmail:d.email} : {docenteUid:'',docenteNombre:'',docenteEmail:''};
+}
+function coincideDocente(r,uid,email) {
+    return !!uid && (r.docenteUid===uid || (!!email && r.docenteEmail && String(r.docenteEmail).toLowerCase()===email));
+}
+async function revisarDisponibilidadDocente(uid, fechas, inicio, fin, excluirIds=[]) {
+    if(!uid)return {conflictos:[],conteos:[]};
+    const email=docentesCache.find(d=>d.uid===uid)?.email||'';
+    const conflictos=[],conteos=[];
+    for(const fecha of fechas){
+        const snap=await db.collection('reservas').where('fecha','==',fecha).get();
+        const mismas=snap.docs.filter(d=>!excluirIds.includes(d.id)&&coincideDocente(d.data(),uid,email));
+        if(mismas.length>=2)conteos.push(`${fecha}: ${mismas.length} actividades ya asignadas`);
+        for(const d of mismas){const r=d.data();if(recMin(inicio)<recMin(r.fin)&&recMin(fin)>recMin(r.inicio))conflictos.push(`${fecha} ${r.laboratorio} — ${r.titulo}`);}
+    }
+    return {conflictos,conteos};
+}
 function recAbrir(fecha, lab, titulo, sh, sm, eh, em) {
-    if (!isAdmin) return;
+    if (!isAdmin || editorImpideCreacion()) return;
     recExtras=new Set(); recPintarExtras();
     recEl('recTitulo').value=titulo || '';
     recEl('recLab').replaceChildren();
     labs.forEach(l=>{const o=document.createElement('option');o.value=l;o.textContent=l;recEl('recLab').appendChild(o);});
     recEl('recLab').value=lab;
+    completarSelectorDocente('recDocente').catch(e=>console.error('Docentes:',e));
     recEl('recFecha').value=fecha;
     recEl('recInicio').value=`${String(sh).padStart(2,'0')}:${String(sm).padStart(2,'0')}`;
     recEl('recFin').value=`${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`;
@@ -1213,11 +1271,15 @@ async function recGuardar(){
         const inicio=recHora(recEl('recInicio').value),fin=recHora(recEl('recFin').value);
         if(recMin(inicio)<480||recMin(fin)>1320||recMin(inicio)>=recMin(fin))throw new Error('El horario debe estar entre las 08:00 y las 22:00.');
         const fechas=recFechasElegidas();
+        const docenteUid=recEl('recDocente').value;
         if(fechas.length>150)throw new Error('Máximo 150 reservas por operación.');
         const fines=fechas.filter(f=>[0,6].includes(recDate(f).getDay()));
         if(fines.length)throw new Error('No se permiten sábados ni domingos: '+fines.join(', '));
         boton.disabled=true;recEl('recEstado').textContent='Comprobando '+fechas.length+' fechas...';
         const ocupadas=await recComprobarFechas(fechas,lab,inicio,fin);
+        const disponibilidad=await revisarDisponibilidadDocente(docenteUid,fechas,inicio,fin);
+        if(disponibilidad.conflictos.length)throw new Error('El docente tiene una superposición horaria: '+disponibilidad.conflictos.join('; '));
+        if(disponibilidad.conteos.length && !confirm('Advertencia: el docente ya tiene varias actividades:\n'+disponibilidad.conteos.join('\n')+'\n¿Querés continuar?'))return;
         if(ocupadas.length){recEl('recEstado').textContent='No se guardó ninguna reserva. Fechas ocupadas:\n'+ocupadas.join(', ');return;}
         const serieId=fechas.length>1?db.collection('reservas').doc().id:null;
         // Transacción por fecha: se vuelve a verificar antes de crear cada reserva.
@@ -1229,6 +1291,7 @@ async function recGuardar(){
                 creadoPor:currentUser.uid,creadoPorEmail:currentUser.email||'',
                 modificadoPor:currentUser.uid,modificadoPorEmail:currentUser.email||'',
                 createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+            Object.assign(data,datosDocente(docenteUid));
             if(serieId)data.serieId=serieId;
             const batch=db.batch();batch.set(ref,data);batch.set(mov,nuevoMovimiento('crear',ref.id,null,data));
             await batch.commit();guardadas++;
@@ -1272,6 +1335,9 @@ async function recAccionSerie(eventId,accion,data){
                 const r=d.data(),lab=data.laboratorio||r.laboratorio,inicio=data.inicio||r.inicio,fin=data.fin||r.fin;
                 const conflictos=await recComprobarFechas([r.fecha],lab,inicio,fin,ids);
                 if(conflictos.length)throw new Error('Conflicto en '+r.fecha+'. No se modificó la serie.');
+                const docenteUid = data.docenteUid !== undefined ? data.docenteUid : (r.docenteUid||'');
+                const docenteCheck = await revisarDisponibilidadDocente(docenteUid,[r.fecha],inicio,fin,ids);
+                if(docenteCheck.conflictos.length)throw new Error('Superposición docente en '+r.fecha+': '+docenteCheck.conflictos.join('; '));
             }
         }
         let procesadas=0;
@@ -1331,6 +1397,7 @@ async function editEvent(dateKey, lab, eventId) {
             o.value = nombre; o.textContent = nombre; selector.append(o);
         });
         selector.value = r.laboratorio;
+        await completarSelectorDocente('editarDocente',r.docenteUid||'');
         document.getElementById('editarFecha').value = r.fecha;
         const formato = t => `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')}`;
         document.getElementById('editarInicio').value = formato(r.inicio);
@@ -1354,15 +1421,23 @@ document.getElementById('editarGuardar').onclick = async () => {
         const snap = await db.collection('reservas').doc(editarReservaId).get();
         if (!snap.exists) throw new Error('La reserva ya no existe.');
         const actual = snap.data();
+        const docenteUid=document.getElementById('editarDocente').value;
         const cambios = {titulo, laboratorio, inicio, fin};
+        if((actual.docenteUid||'')!==docenteUid) {
+            if(actual.googleEventId)throw new Error('Para cambiar el docente de una reserva con invitación, primero hay que habilitar ese campo en api/calendar.js. No se guardó ningún cambio.');
+            Object.assign(cambios,datosDocente(docenteUid));
+        }
         if (actual.titulo === titulo && actual.laboratorio === laboratorio &&
-            recMin(actual.inicio) === recMin(inicio) && recMin(actual.fin) === recMin(fin)) {
+            recMin(actual.inicio) === recMin(inicio) && recMin(actual.fin) === recMin(fin) && (actual.docenteUid||'')===docenteUid) {
             cerrarEditor(); return;
         }
         btn.disabled = true;
         estado.textContent = 'Comprobando disponibilidad...';
         const ocupadas = await recComprobarFechas([actual.fecha],laboratorio,inicio,fin,[editarReservaId]);
         if (ocupadas.length) throw new Error('El laboratorio está ocupado en ese horario.');
+        const docenteCheck=await revisarDisponibilidadDocente(docenteUid,[actual.fecha],inicio,fin,[editarReservaId]);
+        if(docenteCheck.conflictos.length)throw new Error('Superposición del docente: '+docenteCheck.conflictos.join('; '));
+        if(docenteCheck.conteos.length && !confirm('El docente ya tiene dos o más actividades ese día. ¿Continuar?'))return;
         estado.textContent = 'Guardando y sincronizando con Google Calendar...';
         // La función existente pregunta si modificar esta fecha o toda la serie.
         // Si Google no confirma el cambio, el backend no modifica la reserva.
@@ -1380,10 +1455,12 @@ async function adjustEventTime(dateKey, lab, eventId) {
 }
 
 async function deleteEvent(dateKey, lab, eventId) {
-    if (!events[dateKey]?.[lab]?.[eventId] && !monthEvents[dateKey]?.[lab]?.[eventId]) return;
-    if (confirm("¿Eliminar este bloque de reserva?")) {
-        await recAccionSerie(eventId, 'eliminar');
-    }
+    if (!isAdmin) return;
+    bloquearCreacionPorEdicion();
+    document.getElementById('recurrenteModal').classList.remove('visible');
+    await recAccionSerie(eventId, 'eliminar');
+    bloquearCreacionPorEdicion();
+    document.getElementById('recurrenteModal').classList.remove('visible');
 }
 
 async function moveEvent(eventDiv, targetCell) {
@@ -1479,7 +1556,7 @@ function makeCell(lab, h, half) {
     td.dataset.lab  = lab;
     td.dataset.hour = h;
     td.dataset.half = half;
-    td.addEventListener("click",      e => { if (!rangeModeActive && e.target === td) createSingleEvent(lab, h, half); });
+    td.addEventListener("click", e => { if (!rangeModeActive && e.target === td && !editorImpideCreacion()) createSingleEvent(lab, h, half); });
     td.addEventListener("mousedown",  handleMouseDown);
     td.addEventListener("mouseenter", handleMouseEnter);
     td.addEventListener("mouseup",    handleMouseUp);
@@ -1541,6 +1618,10 @@ function renderDayView() {
 
                 const controls = document.createElement("div");
                 controls.className = "edit-controls";
+                // Evitar que los controles disparen selección por rango o creación de reservas.
+                ['pointerdown','mousedown','mouseup','click','dblclick','touchstart','touchend'].forEach(tipo => {
+                    controls.addEventListener(tipo, e => e.stopPropagation());
+                });
 
                 const editBtn = document.createElement("button");
                 editBtn.className = "edit-btn"; editBtn.innerHTML = "✏️"; editBtn.title = "Modificar reserva"; editBtn.setAttribute("aria-label","Modificar reserva");
@@ -1852,9 +1933,54 @@ function showTeacherSchedule() {
     document.getElementById("horariosModal").classList.add('visible');
 }
 
+// ======================== DISPONIBILIDAD DOCENTE ========================
+document.getElementById('btnDisponibilidad').onclick=async()=>{
+    const m=document.getElementById('disponibilidadModal');m.classList.add('visible');
+    document.getElementById('dispFecha').value=getCurrentDateKey();
+    document.getElementById('dispResultado').textContent='Cargando docentes...';
+    try{await completarSelectorDocente('dispDocente');document.getElementById('dispResultado').textContent='Seleccioná un docente y consultá su agenda.';}
+    catch(e){document.getElementById('dispResultado').textContent='No se pudieron cargar docentes: '+e.message;}
+};
+document.getElementById('dispCerrar').onclick=()=>document.getElementById('disponibilidadModal').classList.remove('visible');
+document.getElementById('dispBuscar').onclick=async()=>{
+    const out=document.getElementById('dispResultado'),uid=document.getElementById('dispDocente').value;
+    const desde=document.getElementById('dispFecha').value,dias=Number(document.getElementById('dispPeriodo').value);
+    if(!uid||!recFechaValida(desde)){out.textContent='Seleccioná un docente y una fecha válida.';return;}
+    out.textContent='Consultando reservas...';
+    try{
+        const hasta=recDate(desde);hasta.setDate(hasta.getDate()+dias);
+        const snap=await db.collection('reservas').where('fecha','>=',desde).where('fecha','<',recKey(hasta)).get();
+        const email=docentesCache.find(d=>d.uid===uid)?.email||'';
+        const docs=snap.docs.map(d=>({id:d.id,...d.data()}));
+        const asignadas=docs.filter(r=>coincideDocente(r,uid,email)).sort((a,b)=>a.fecha.localeCompare(b.fecha)||recMin(a.inicio)-recMin(b.inicio));
+        out.replaceChildren();
+        const cab=document.createElement('p');cab.style.fontWeight='bold';cab.textContent=`${asignadas.length} actividad(es) asignadas en ${dias===1?'ese día':'los próximos 15 días'}.`;out.appendChild(cab);
+        const porFecha={};asignadas.forEach(r=>(porFecha[r.fecha]??=[]).push(r));
+        for(let n=0;n<dias;n++){
+            const d=recDate(desde);d.setDate(d.getDate()+n);const fecha=recKey(d);
+            const actividades=porFecha[fecha]||[];
+            const linea=document.createElement('div');linea.style.cssText='padding:9px 0;border-bottom:1px solid #ddd';
+            const encabezado=document.createElement('strong');encabezado.textContent=`${fecha} — ${actividades.length} actividad(es)`;linea.appendChild(encabezado);
+            actividades.forEach(r=>{
+                const p=document.createElement('div');p.style.marginTop='4px';
+                p.textContent=`${String(r.inicio.hour).padStart(2,'0')}:${String(r.inicio.minute).padStart(2,'0')}–${String(r.fin.hour).padStart(2,'0')}:${String(r.fin.minute).padStart(2,'0')} | ${r.laboratorio} | ${r.titulo}`;
+                linea.appendChild(p);
+            });
+            if(dias===1){
+                const libres=labs.filter(lab=>!docs.some(r=>r.fecha===fecha&&r.laboratorio===lab));
+                const p=document.createElement('p');p.style.cssText='font-size:.82rem;color:#365';
+                p.textContent='Laboratorios sin reservas en todo el día: '+(libres.join(', ')||'Ninguno')+'. Para horarios específicos, el sistema comprueba disponibilidad al guardar.';
+                linea.appendChild(p);
+            }
+            out.appendChild(linea);
+        }
+        if(!asignadas.length){const p=document.createElement('p');p.textContent='Sin reservas vinculadas a este docente en el período. Las reservas antiguas sin docente asignado no aparecen aquí.';out.appendChild(p);}
+    }catch(e){console.error(e);out.textContent='Error consultando agenda: '+e.message;}
+};
+
 // ======================== SELECCIÓN DE RANGO ========================
 function handleMouseDown(e) {
-    if (!rangeModeActive) return;
+    if (!rangeModeActive || e.target !== e.currentTarget || e.target.closest(".event-block")) return;
     e.preventDefault();
     const td = e.currentTarget;
     selectedLab    = td.dataset.lab;
@@ -1865,7 +1991,7 @@ function handleMouseDown(e) {
 }
 
 function handleMouseEnter(e) {
-    if (!rangeModeActive || selectionStart.hour === null) return;
+    if (!rangeModeActive || selectionStart.hour === null || e.target !== e.currentTarget) return;
     const td = e.currentTarget;
     if (td.dataset.lab !== selectedLab) return;
     selectionEnd = { hour: parseInt(td.dataset.hour), half: parseInt(td.dataset.half) };
@@ -1884,7 +2010,7 @@ function handleMouseEnter(e) {
 }
 
 function handleMouseUp(e) {
-    if (!rangeModeActive || selectionStart.hour === null) return;
+    if (!rangeModeActive || selectionStart.hour === null || e.target !== e.currentTarget) return;
     const td = e.currentTarget;
     if (td.dataset.lab !== selectedLab) { cancelRangeSelection(); return; }
 
