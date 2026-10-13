@@ -19,7 +19,7 @@ const fail = (res, status, error) =>
 const validEmail = x =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x);
 
-// Convertir una reserva de Firestore a un evento de Google Calendar.
+// Convierte una reserva de Firestore a un evento de Google Calendar.
 function toEvent(r) {
   if (
     typeof r.fecha !== 'string' ||
@@ -41,18 +41,11 @@ function toEvent(r) {
       throw Error('Horario de reserva inválido');
     }
 
-    return (
-      String(o.hour).padStart(2, '0') +
-      ':' +
-      String(o.minute).padStart(2, '0')
-    );
+    return `${String(o.hour).padStart(2, '0')}:${String(o.minute).padStart(2, '0')}`;
   }
 
-  const inicio =
-    `${r.fecha}T${hora(r.inicio)}:00-03:00`;
-
-  const fin =
-    `${r.fecha}T${hora(r.fin)}:00-03:00`;
+  const inicio = `${r.fecha}T${hora(r.inicio)}:00-03:00`;
+  const fin = `${r.fecha}T${hora(r.fin)}:00-03:00`;
 
   if (
     !Number.isFinite(Date.parse(inicio)) ||
@@ -70,7 +63,6 @@ function toEvent(r) {
     fin,
 
     ubicacion: String(r.laboratorio || ''),
-
     descripcion: 'Reserva del Centro de Simulación'
   };
 }
@@ -158,7 +150,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Verificar permisos de administrador.
+    // Verificar que sea administrador.
     const profile = await db
       .collection('usuarios')
       .doc(user.uid)
@@ -181,7 +173,7 @@ module.exports = async function handler(req, res) {
       invitados
     } = req.body || {};
 
-    // Mantener la prueba de conexión.
+    // Prueba de conexión.
     if (accion === 'prueba') {
       await script({ accion: 'prueba' });
 
@@ -192,8 +184,8 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Por ahora, solamente habilitamos crear invitaciones.
-    if (accion !== 'crear') {
+    // Acciones habilitadas.
+    if (!['crear', 'actualizar'].includes(accion)) {
       return fail(
         res,
         400,
@@ -201,7 +193,7 @@ module.exports = async function handler(req, res) {
       );
     }
 
-    // Validar la reserva.
+    // Validar ID de reserva.
     if (
       typeof reservaId !== 'string' ||
       !/^[\w-]{1,200}$/.test(reservaId)
@@ -243,7 +235,7 @@ module.exports = async function handler(req, res) {
       );
     }
 
-    // Buscar la reserva real en Firestore.
+    // Consultar la reserva real.
     const ref = db
       .collection('reservas')
       .doc(reservaId);
@@ -253,7 +245,7 @@ module.exports = async function handler(req, res) {
 
     let evento;
 
-    // Impedir que se envíe dos veces.
+    // Bloquear envíos simultáneos y evitar duplicados.
     await db.runTransaction(async tx => {
       const snap = await tx.get(ref);
 
@@ -263,14 +255,27 @@ module.exports = async function handler(req, res) {
 
       const r = snap.data();
 
-      if (r.googleEventId) {
+      if (accion === 'crear' && r.googleEventId) {
         throw Error(
           'Esta reserva ya tiene una invitación'
         );
       }
 
-      // Si hubo un envío incierto, se requiere
-      // verificación antes de volver a intentar.
+      if (accion === 'actualizar' && !r.googleEventId) {
+        throw Error(
+          'Esta reserva no tiene invitación para actualizar'
+        );
+      }
+
+      if (
+        accion === 'actualizar' &&
+        r.googleInviteState !== 'sent'
+      ) {
+        throw Error(
+          'El evento requiere verificación antes de actualizar'
+        );
+      }
+
       if (r.googleInviteState === 'pending') {
         throw Error(
           'Envío pendiente de verificación en Google Calendar'
@@ -278,6 +283,11 @@ module.exports = async function handler(req, res) {
       }
 
       evento = toEvent(r);
+
+      // Si existe, utilizar el mismo evento de Google.
+      if (accion === 'actualizar') {
+        evento.eventoId = r.googleEventId;
+      }
 
       tx.update(ref, {
         googleInviteState: 'pending',
@@ -288,10 +298,10 @@ module.exports = async function handler(req, res) {
 
     let result;
 
-    // Crear la invitación en Google Calendar.
+    // Crear o actualizar en Google Calendar.
     try {
       result = await script({
-        accion: 'crear',
+        accion,
         ...evento,
         invitados: emails
       });
@@ -317,7 +327,7 @@ module.exports = async function handler(req, res) {
       );
     }
 
-    // Guardar el ID del evento en la reserva.
+    // Guardar resultado en Firestore.
     try {
       await ref.update({
         googleEventId: result.eventoId,
@@ -331,7 +341,7 @@ module.exports = async function handler(req, res) {
       });
     } catch (e) {
       console.error(
-        'Evento creado, no se guardó ID',
+        'Evento procesado, no se guardó el resultado',
         reservaId,
         result.eventoId,
         e
@@ -340,13 +350,18 @@ module.exports = async function handler(req, res) {
       return fail(
         res,
         503,
-        'Google creó la invitación pero no se pudo registrar. Contactá al administrador antes de reintentar.'
+        'Google procesó la invitación pero no se pudo registrar. Contactá al administrador antes de reintentar.'
       );
     }
 
     return res.status(200).json({
       ok: true,
-      mensaje: 'Invitación enviada correctamente',
+
+      mensaje:
+        accion === 'crear'
+          ? 'Invitación enviada correctamente'
+          : 'Invitación actualizada correctamente',
+
       eventoId: result.eventoId
     });
 
