@@ -552,6 +552,21 @@ body {
  </div>
 </div>
 
+
+<!-- INVITACIONES DE GOOGLE CALENDAR -->
+<div id="invitacionModal" class="modal-overlay" style="z-index:23000">
+  <div class="modal-box" style="width:95%;max-width:610px;max-height:90vh;overflow:auto;gap:12px">
+    <div class="modal-header"><h3>✉️ Enviar invitación</h3><button class="modal-close-btn" id="invCerrar">✕</button></div>
+    <div id="invDetalle" style="background:#f5f7fa;padding:12px;border-radius:8px;white-space:pre-wrap"></div>
+    <label style="font-weight:600">Usuarios registrados</label>
+    <div id="invUsuarios" style="max-height:180px;overflow:auto;border:1px solid #ddd;border-radius:8px;padding:10px">Cargando...</div>
+    <label style="font-weight:600">Otros correos (separados por coma o renglón)</label>
+    <textarea id="invExternos" rows="3" placeholder="persona@ejemplo.com" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px"></textarea>
+    <div id="invEstado" role="status" style="font-size:.86rem;white-space:pre-wrap"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn" id="invCancelar">Cancelar</button><button class="btn" id="invEnviar" style="background:#21855c">Enviar invitación</button></div>
+  </div>
+</div>
+
 <!-- ===================== MODAL HORARIOS PROFESORES ===================== -->
 <div id="horariosModal" class="modal-overlay">
   <div id="horariosModalContent" class="modal-box">
@@ -984,6 +999,81 @@ function hasOverlap(dateKey, lab, sh, sm, eh, em, excludeId = null) {
     return false;
 }
 
+
+// ======================== INVITACIONES MANUALES ========================
+let invReservaId = null;
+const inv = id => document.getElementById(id);
+function cerrarInvitacion() { inv('invitacionModal').classList.remove('visible'); invReservaId = null; }
+inv('invCerrar').onclick = inv('invCancelar').onclick = cerrarInvitacion;
+async function abrirInvitacion(reservaId) {
+    if (!isAdmin || !currentUser) return;
+    invReservaId = reservaId;
+    inv('invEstado').textContent = '';
+    inv('invExternos').value = '';
+    inv('invUsuarios').textContent = 'Cargando usuarios...';
+    inv('invDetalle').textContent = 'Cargando reserva...';
+    inv('invEnviar').disabled = false;
+    inv('invitacionModal').classList.add('visible');
+    try {
+        const [reserva, usuarios] = await Promise.all([
+            db.collection('reservas').doc(reservaId).get(),
+            db.collection('usuarios').get()
+        ]);
+        if (!reserva.exists) throw new Error('La reserva ya no existe.');
+        const r = reserva.data();
+        const horario = x => `${String(x?.hour ?? 0).padStart(2,'0')}:${String(x?.minute ?? 0).padStart(2,'0')}`;
+        inv('invDetalle').textContent = `${r.titulo || 'Reserva'}
+${r.fecha} · ${horario(r.inicio)} a ${horario(r.fin)}
+${r.laboratorio || ''}`;
+        if (r.googleEventId || r.googleInviteState === 'pending') {
+            inv('invEnviar').disabled = true;
+            inv('invEstado').textContent = r.googleEventId
+                ? 'Esta reserva ya tiene una invitación enviada. No se volverá a enviar.'
+                : 'Hay un envío pendiente de verificación. Revisá Google Calendar antes de reintentar.';
+        }
+        const lista = inv('invUsuarios'); lista.replaceChildren();
+        let cantidad = 0;
+        usuarios.forEach(doc => {
+            const u = doc.data(), email = String(u.email || '').trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+            const etiqueta = document.createElement('label');
+            etiqueta.style.cssText = 'display:block;padding:5px 2px;cursor:pointer';
+            const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = email; cb.className = 'invUsuario';
+            etiqueta.append(cb, document.createTextNode(' ' + (u.nombre || email) + ' (' + email + ')'));
+            lista.appendChild(etiqueta); cantidad++;
+        });
+        if (!cantidad) lista.textContent = 'No hay usuarios con correo disponible.';
+    } catch (e) {
+        inv('invEstado').textContent = 'Error: ' + e.message;
+        inv('invEnviar').disabled = true;
+    }
+}
+inv('invEnviar').onclick = async () => {
+    if (!isAdmin || !invReservaId || inv('invEnviar').disabled) return;
+    const elegidos = [...document.querySelectorAll('.invUsuario:checked')].map(x => x.value);
+    const extras = inv('invExternos').value.split(/[,;\n]+/).map(x => x.trim()).filter(Boolean);
+    const invitados = [...new Set([...elegidos, ...extras].map(x => x.toLowerCase()))];
+    if (!invitados.length) { inv('invEstado').textContent = 'Seleccioná al menos un destinatario.'; return; }
+    if (invitados.length > 50 || invitados.some(x => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x))) {
+        inv('invEstado').textContent = 'Revisá los correos. Máximo 50 destinatarios.'; return;
+    }
+    if (!confirm(`¿Enviar la invitación de esta reserva a ${invitados.length} destinatario(s)?`)) return;
+    inv('invEnviar').disabled = true; inv('invEstado').textContent = 'Enviando invitación...';
+    try {
+        const token = await currentUser.getIdToken();
+        const respuesta = await fetch('/api/calendar', {
+            method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+            body:JSON.stringify({accion:'crear',reservaId:invReservaId,invitados})
+        });
+        const resultado = await respuesta.json();
+        if (!respuesta.ok || !resultado.ok) throw new Error(resultado.error || 'No se pudo enviar.');
+        inv('invEstado').textContent = 'Invitación enviada correctamente.';
+        alert('Invitación enviada correctamente.'); cerrarInvitacion();
+    } catch (e) {
+        inv('invEstado').textContent = 'No se pudo confirmar el envío: '+e.message+'\nRevisá Google Calendar antes de volver a intentar.';
+    }
+};
+
 // ======================== OPERACIONES DE EVENTOS (UI) ========================
 
 // RECURRENCIA: cada fecha se guarda como reserva independiente con un identificador de serie.
@@ -1104,6 +1194,8 @@ async function recAccionSerie(eventId,accion,data){
     try{
         const ref=db.collection('reservas').doc(eventId),snap=await ref.get();
         if(!snap.exists)throw new Error('La reserva ya no existe.');
+        if (snap.data().googleEventId || snap.data().googleInviteState === 'pending')
+            throw new Error('Esta reserva tiene una invitación de Google Calendar. No se puede modificar ni eliminar hasta habilitar la actualización/cancelación de invitaciones.');
         const serie=snap.data().serieId;
         if(!serie)return accion==='eliminar'?eliminarReserva(eventId):actualizarReserva(eventId,data);
         const opcion=prompt('Esta reserva pertenece a una serie.\n1 → Solo esta fecha\n2 → Toda la serie\n0 → Cancelar','1');
@@ -1111,6 +1203,8 @@ async function recAccionSerie(eventId,accion,data){
         if(opcion==='1')return accion==='eliminar'?eliminarReserva(eventId):actualizarReserva(eventId,data);
         const docs=(await db.collection('reservas').where('serieId','==',serie).get()).docs;
         if(!docs.length)return;
+        if (docs.some(d => d.data().googleEventId || d.data().googleInviteState === 'pending'))
+            throw new Error('La serie contiene invitaciones enviadas. No se puede modificar ni eliminar hasta habilitar su actualización/cancelación.');
         if(accion==='eliminar'){
             if(!confirm('¿Eliminar las '+docs.length+' reservas de la serie?'))return;
         } else {
@@ -1218,6 +1312,8 @@ async function clearDay() {
     try {
         const snap = await db.collection('reservas').where('fecha', '==', dateKey).get();
         if (snap.empty) return;
+        if (snap.docs.some(d => d.data().googleEventId || d.data().googleInviteState === 'pending'))
+            throw new Error('El día contiene invitaciones enviadas. No se puede limpiar hasta habilitar su cancelación.');
         // Cada lote guarda eliminaciones y sus movimientos de manera atómica.
         // Lotes separados pueden confirmarse independientemente.
         for (let i = 0; i < snap.docs.length; i += 200) {
@@ -1347,7 +1443,13 @@ function renderDayView() {
                 delBtn.className = "delete-btn"; delBtn.innerHTML = "🗑️";
                 delBtn.onclick = e => { e.stopPropagation(); deleteEvent(dateKey, lab, event.id); };
 
-                controls.append(editBtn, timeBtn, delBtn);
+                const inviteBtn = document.createElement("button");
+                inviteBtn.className = "edit-btn";
+                inviteBtn.title = "Enviar invitación de Google Calendar";
+                inviteBtn.textContent = "✉";
+                inviteBtn.style.width = "20px";
+                inviteBtn.onclick = e => { e.stopPropagation(); abrirInvitacion(event.id); };
+                controls.append(editBtn, timeBtn, delBtn, inviteBtn);
                 block.append(titleDiv, timeDiv, controls);
                 startCell.appendChild(block);
             });
@@ -1469,7 +1571,7 @@ function renderWeekView() {
             const lab     = info.event.extendedProps.lab;
             const date    = info.event.extendedProps.date;
             const eventId = info.event.extendedProps.eventId;
-            const action  = prompt("¿Qué hacer?\n1 → Editar título\n2 → Ajustar horario\n3 → Eliminar\n0 → Cancelar");
+            const action  = prompt("¿Qué hacer?\n1 → Editar título\n2 → Ajustar horario\n3 → Eliminar\n4 → Enviar invitación\n0 → Cancelar");
             if (action === "1") {
                 editEvent(date, lab, eventId);
             } else if (action === "2") {
@@ -1477,6 +1579,8 @@ function renderWeekView() {
                 if (ev) adjustEventTime(date, lab, eventId, ev);
             } else if (action === "3") {
                 deleteEvent(date, lab, eventId);
+            } else if (action === "4") {
+                abrirInvitacion(eventId);
             }
         },
         dateClick: function(info) {
@@ -1539,7 +1643,7 @@ function openModalLab(lab) {
             const lab2    = info.event.extendedProps.lab;
             const date    = info.event.extendedProps.date;
             const eventId = info.event.extendedProps.eventId;
-            const action  = prompt("¿Qué hacer?\n1 → Editar título\n2 → Ajustar horario\n3 → Eliminar\n0 → Cancelar");
+            const action  = prompt("¿Qué hacer?\n1 → Editar título\n2 → Ajustar horario\n3 → Eliminar\n4 → Enviar invitación\n0 → Cancelar");
             if (action === "1") {
                 editEvent(date, lab2, eventId);
             } else if (action === "2") {
@@ -1547,6 +1651,8 @@ function openModalLab(lab) {
                 if (ev) adjustEventTime(date, lab2, eventId, ev);
             } else if (action === "3") {
                 deleteEvent(date, lab2, eventId);
+            } else if (action === "4") {
+                abrirInvitacion(eventId);
             }
         }
     });
