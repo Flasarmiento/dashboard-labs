@@ -1291,22 +1291,31 @@ async function recAccionSerie(eventId,accion,data){
 }
 
 async function createSingleEvent(lab,hour,half){
+ if(editorImpideCreacion()) return;
  const h=Number(hour),m=Number(half), total=h*60+m+60;
  recAbrir(getCurrentDateKey(),lab,'',h,m,Math.floor(total/60),total%60);
 }
 async function createRangeEvent(lab,sh,sm,eh,em,durationMin){
+ if(editorImpideCreacion()) return;
  recAbrir(getCurrentDateKey(),lab,'',sh,sm,eh,em);
 }
 
 let editarReservaId = null;
+let ultimaInteraccionEditor = 0;
+function bloquearCreacionPorEdicion() { ultimaInteraccionEditor = Date.now(); }
+function editorImpideCreacion() { return !!editarReservaId || document.getElementById("editarReservaModal").classList.contains("visible") || Date.now() - ultimaInteraccionEditor < 1200; }
 function cerrarEditor() {
+    bloquearCreacionPorEdicion();
     document.getElementById('editarReservaModal').classList.remove('visible');
     editarReservaId = null;
 }
+document.getElementById('editarReservaModal').addEventListener('click', e => e.stopPropagation());
 document.getElementById('editarCerrar').onclick = cerrarEditor;
 document.getElementById('editarCancelar').onclick = cerrarEditor;
 async function editEvent(dateKey, lab, eventId) {
     if (!isAdmin) return;
+    bloquearCreacionPorEdicion();
+    document.getElementById("recurrenteModal").classList.remove("visible");
     const estado = document.getElementById('editarEstado');
     estado.textContent = 'Cargando reserva...';
     try {
@@ -1358,7 +1367,7 @@ document.getElementById('editarGuardar').onclick = async () => {
         // La función existente pregunta si modificar esta fecha o toda la serie.
         // Si Google no confirma el cambio, el backend no modifica la reserva.
         const completado = await recAccionSerie(editarReservaId,'modificar',cambios);
-        if (completado) cerrarEditor();
+        if (completado) { bloquearCreacionPorEdicion(); document.getElementById("recurrenteModal").classList.remove("visible"); cerrarEditor(); }
         else estado.textContent = 'No se aplicaron todos los cambios. Revisá el calendario antes de reintentar.';
     } catch(e) {
         console.error(e);
@@ -1686,6 +1695,7 @@ function renderWeekView() {
             }
         },
         dateClick: function(info) {
+            if (editorImpideCreacion()) return;
             if (!rangeModeActive) {
                 const lab = prompt("¿En qué laboratorio?\n" + labs.join(', '), "SUM");
                 if (lab && labs.includes(lab)) {
