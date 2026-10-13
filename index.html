@@ -479,7 +479,7 @@ body {
       <button class="btn" id="btnRecurrente" style="background:#21855c;display:none">📅 Reserva repetida</button>
        <button class="btn" id="rangeModeBtn">📏 Modo Rango</button>
       <button class="btn" id="btnHorarios">👨‍🏫 Horarios</button>
-      <button class="btn" id="btnDisponibilidad" style="background:#246c80">🔎 Disponibilidad docente</button>
+      
       <button class="btn" id="btnLimpiar" style="display: none;">🧹 Limpiar día</button>
       <button class="btn" id="btnAdminUsers" style="display:none;">👥 Usuarios</button>
         <button class="btn" id="btnMovimientos" style="display:none;background:#2c3e50;">📜 Movimientos</button>
@@ -487,6 +487,10 @@ body {
     </div>
   </div>
 
+  <div id="accesoAgendaDocente" style="padding:8px 16px;background:#eaf5f8;border-bottom:1px solid #b8d9e1;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <button class="btn" id="btnDisponibilidad" style="background:#246c80;font-size:14px;padding:10px 16px;white-space:nowrap;">👨‍🏫 Consultar disponibilidad docente</button>
+    <span style="font-size:13px;color:#315467">Buscá un docente, consultá su agenda de hoy o de los próximos 15 días y verificá sus laboratorios.</span>
+  </div>
   <div id="selectionInfo">
     <span>🖱️ Arrastrá para seleccionar el rango horario</span>
     <button id="cancelSelection">✕</button>
@@ -1369,7 +1373,7 @@ async function createRangeEvent(lab,sh,sm,eh,em,durationMin){
 let editarReservaId = null;
 let ultimaInteraccionEditor = 0;
 function bloquearCreacionPorEdicion() { ultimaInteraccionEditor = Date.now(); }
-function editorImpideCreacion() { return !!editarReservaId || document.getElementById("editarReservaModal").classList.contains("visible") || Date.now() - ultimaInteraccionEditor < 1200; }
+function editorImpideCreacion() { return !!editarReservaId || document.getElementById("editarReservaModal").classList.contains("visible") || Date.now() - ultimaInteraccionEditor < 3500; }
 function cerrarEditor() {
     bloquearCreacionPorEdicion();
     document.getElementById('editarReservaModal').classList.remove('visible');
@@ -1456,6 +1460,7 @@ async function adjustEventTime(dateKey, lab, eventId) {
 
 async function deleteEvent(dateKey, lab, eventId) {
     if (!isAdmin) return;
+    inicioClickCelda = null;
     bloquearCreacionPorEdicion();
     document.getElementById('recurrenteModal').classList.remove('visible');
     await recAccionSerie(eventId, 'eliminar');
@@ -1551,12 +1556,26 @@ function buildTable() {
     });
 }
 
+// Solo se crea una reserva si el usuario inició el clic en una celda vacía.
+// Evita clics fantasma cuando se elimina/re-renderiza un evento.
+let inicioClickCelda = null;
+document.addEventListener('pointerdown', function(e) {
+    const celda = e.target.closest('td[data-lab][data-hour][data-half]');
+    inicioClickCelda = (celda && e.target === celda && !e.target.closest('.event-block'))
+        ? {celda, momento: Date.now()} : null;
+}, true);
+function clickIntencionalCelda(td, e) {
+    const valido = e.isTrusted && e.target === td && inicioClickCelda &&
+        inicioClickCelda.celda === td && Date.now() - inicioClickCelda.momento < 1500;
+    inicioClickCelda = null;
+    return !!valido;
+}
 function makeCell(lab, h, half) {
     const td = document.createElement("td");
     td.dataset.lab  = lab;
     td.dataset.hour = h;
     td.dataset.half = half;
-    td.addEventListener("click", e => { if (!rangeModeActive && e.target === td && !editorImpideCreacion()) createSingleEvent(lab, h, half); });
+    td.addEventListener("click", e => { if (!rangeModeActive && !editorImpideCreacion() && clickIntencionalCelda(td,e)) createSingleEvent(lab, h, half); });
     td.addEventListener("mousedown",  handleMouseDown);
     td.addEventListener("mouseenter", handleMouseEnter);
     td.addEventListener("mouseup",    handleMouseUp);
@@ -1617,6 +1636,7 @@ function renderDayView() {
                 timeDiv.textContent = `${sH}:${String(sM).padStart(2,'0')} - ${eH}:${String(eM).padStart(2,'0')}`;
 
                 const controls = document.createElement("div");
+                block.addEventListener('pointerdown', () => { inicioClickCelda = null; }, true);
                 controls.className = "edit-controls";
                 // Evitar que los controles disparen selección por rango o creación de reservas.
                 ['pointerdown','mousedown','mouseup','click','dblclick','touchstart','touchend'].forEach(tipo => {
@@ -1624,18 +1644,22 @@ function renderDayView() {
                 });
 
                 const editBtn = document.createElement("button");
+                editBtn.type = "button";
                 editBtn.className = "edit-btn"; editBtn.innerHTML = "✏️"; editBtn.title = "Modificar reserva"; editBtn.setAttribute("aria-label","Modificar reserva");
                 editBtn.onclick = e => { e.stopPropagation(); editEvent(dateKey, lab, event.id); };
 
                 const timeBtn = document.createElement("button");
+                timeBtn.type = "button";
                 timeBtn.className = "time-btn"; timeBtn.innerHTML = "⏱️"; timeBtn.title = "Modificar horario"; timeBtn.setAttribute("aria-label","Modificar horario");
                 timeBtn.onclick = e => { e.stopPropagation(); adjustEventTime(dateKey, lab, event.id, event); };
 
                 const delBtn = document.createElement("button");
+                delBtn.type = "button";
                 delBtn.className = "delete-btn"; delBtn.innerHTML = "🗑️"; delBtn.title = "Eliminar reserva"; delBtn.setAttribute("aria-label","Eliminar reserva");
                 delBtn.onclick = e => { e.stopPropagation(); deleteEvent(dateKey, lab, event.id); };
 
                 const inviteBtn = document.createElement("button");
+                inviteBtn.type = "button";
                 inviteBtn.className = "edit-btn";
                 inviteBtn.title = "Enviar invitación de Google Calendar";
                 inviteBtn.textContent = "✉";
@@ -1760,6 +1784,8 @@ function renderWeekView() {
         slotDuration: '00:30:00',
         firstDay: 1,
         eventClick: function(info) {
+            info.jsEvent.stopPropagation();
+            bloquearCreacionPorEdicion();
             const lab     = info.event.extendedProps.lab;
             const date    = info.event.extendedProps.date;
             const eventId = info.event.extendedProps.eventId;
@@ -1776,7 +1802,7 @@ function renderWeekView() {
             }
         },
         dateClick: function(info) {
-            if (editorImpideCreacion()) return;
+            if (editorImpideCreacion() || !info.jsEvent || !info.jsEvent.isTrusted) return;
             if (!rangeModeActive) {
                 const lab = prompt("¿En qué laboratorio?\n" + labs.join(', '), "SUM");
                 if (lab && labs.includes(lab)) {
@@ -1833,6 +1859,8 @@ function openModalLab(lab) {
             escucharMesCalendario(getLocalDateKey(info.start), getLocalDateKey(info.end));
         },
         eventClick: function(info) {
+            info.jsEvent.stopPropagation();
+            bloquearCreacionPorEdicion();
             const lab2    = info.event.extendedProps.lab;
             const date    = info.event.extendedProps.date;
             const eventId = info.event.extendedProps.eventId;
