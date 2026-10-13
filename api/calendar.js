@@ -44,11 +44,8 @@ function evento(r) {
     return `${String(o.hour).padStart(2, '0')}:${String(o.minute).padStart(2, '0')}`;
   };
 
-  const inicio =
-    `${r.fecha}T${hora(r.inicio)}:00-03:00`;
-
-  const fin =
-    `${r.fecha}T${hora(r.fin)}:00-03:00`;
+  const inicio = `${r.fecha}T${hora(r.inicio)}:00-03:00`;
+  const fin = `${r.fecha}T${hora(r.fin)}:00-03:00`;
 
   if (
     !Number.isFinite(Date.parse(inicio)) ||
@@ -84,18 +81,14 @@ async function apps(payload) {
 
   const r = await fetch(url, {
     method: 'POST',
-
     headers: {
       'Content-Type': 'text/plain;charset=utf-8'
     },
-
     body: JSON.stringify({
       ...payload,
       secret
     }),
-
     redirect: 'follow',
-
     signal: AbortSignal.timeout(25000)
   });
 
@@ -137,14 +130,11 @@ function movimiento(accion, id, antes, despues, user) {
   return {
     accion,
     reservaId: id,
-
     antes: resumen(antes),
     despues: resumen(despues),
-
     usuarioUid: user.uid,
     usuarioEmail: user.email || '',
     usuarioNombre: user.name || '',
-
     timestamp:
       admin.firestore.FieldValue.serverTimestamp()
   };
@@ -169,7 +159,10 @@ function validarCambios(c) {
           'titulo',
           'laboratorio',
           'inicio',
-          'fin'
+          'fin',
+          'docenteUid',
+          'docenteNombre',
+          'docenteEmail'
         ].includes(k)
     )
   ) {
@@ -196,6 +189,37 @@ function validarCambios(c) {
     )
   ) {
     throw Error('Laboratorio inválido');
+  }
+
+  for (const k of [
+    'docenteUid',
+    'docenteNombre',
+    'docenteEmail'
+  ]) {
+    if (
+      k in c &&
+      (
+        typeof c[k] !== 'string' ||
+        c[k].length > 250
+      )
+    ) {
+      throw Error('Dato docente inválido');
+    }
+  }
+
+  if (
+    [
+      'docenteUid',
+      'docenteNombre',
+      'docenteEmail'
+    ].some(k => k in c) &&
+    ![
+      'docenteUid',
+      'docenteNombre',
+      'docenteEmail'
+    ].every(k => k in c)
+  ) {
+    throw Error('Datos docentes incompletos');
   }
 
   return c;
@@ -306,8 +330,8 @@ module.exports = async function handler(req, res) {
 
       correos = [
         ...new Set(
-          invitados.map(
-            x => x.trim().toLowerCase()
+          invitados.map(x =>
+            x.trim().toLowerCase()
           )
         )
       ];
@@ -328,6 +352,50 @@ module.exports = async function handler(req, res) {
       .collection('reservas')
       .doc(reservaId);
 
+    // Validar docente responsable.
+    if (
+      accion === 'modificar' &&
+      cambios &&
+      'docenteUid' in cambios
+    ) {
+      if (cambios.docenteUid) {
+        const docente = await db
+          .collection('usuarios')
+          .doc(cambios.docenteUid)
+          .get();
+
+        if (
+          !docente.exists ||
+          docente.data().activo === false ||
+          docente.data().esDocente !== true
+        ) {
+          return fail(
+            res,
+            400,
+            'El responsable seleccionado no pertenece al plantel docente activo'
+          );
+        }
+
+        const d = docente.data();
+
+        cambios.docenteNombre = String(
+          d.nombre ||
+          d.displayName ||
+          d.name ||
+          d.email ||
+          ''
+        );
+
+        cambios.docenteEmail = String(
+          d.email || ''
+        ).toLowerCase();
+
+      } else {
+        cambios.docenteNombre = '';
+        cambios.docenteEmail = '';
+      }
+    }
+
     let original;
     let nuevo;
     let payload;
@@ -341,7 +409,9 @@ module.exports = async function handler(req, res) {
 
       original = snap.data();
 
-      if (original.googleInviteState === 'pending') {
+      if (
+        original.googleInviteState === 'pending'
+      ) {
         throw Error(
           'Operación pendiente de verificación. Revisá Google Calendar.'
         );
@@ -418,7 +488,6 @@ module.exports = async function handler(req, res) {
           accion === 'modificar'
             ? 'actualizar'
             : accion,
-
         ...payload
       });
     } catch (e) {
@@ -494,13 +563,10 @@ module.exports = async function handler(req, res) {
 
           tx.update(ref, {
             ...cambios,
-
             googleInviteState: 'sent',
-
             modificadoPor: user.uid,
             modificadoPorEmail:
               user.email || '',
-
             updatedAt:
               admin.firestore.FieldValue.serverTimestamp()
           });
@@ -523,12 +589,9 @@ module.exports = async function handler(req, res) {
       } else {
         await ref.update({
           googleEventId: result.eventoId,
-
           googleInvitados: correos,
-
           googleInvitacionEnviada:
             admin.firestore.FieldValue.serverTimestamp(),
-
           googleInviteState: 'sent'
         });
       }
@@ -554,7 +617,8 @@ module.exports = async function handler(req, res) {
       mensaje: {
         crear: 'Invitación enviada',
         actualizar: 'Destinatarios actualizados',
-        modificar: 'Reserva e invitación actualizadas',
+        modificar:
+          'Reserva e invitación actualizadas',
         cancelar:
           'Invitación cancelada y reserva eliminada'
       }[accion],
@@ -568,7 +632,8 @@ module.exports = async function handler(req, res) {
     return fail(
       res,
       400,
-      e.message || 'Error al procesar la operación'
+      e.message ||
+      'Error al procesar la operación'
     );
   }
 };
