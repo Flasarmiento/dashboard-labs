@@ -281,6 +281,8 @@ body {
     border: 1px solid rgba(255,255,255,0.35);
     overflow-y: auto; overflow-x: hidden; transition: opacity 0.15s; pointer-events: auto;
 }
+.event-block { touch-action: none; }
+body .event-block:active { cursor: grabbing; }
 .event-block .event-title {
     font-weight: bold; font-size: 0.68rem;
     white-space: normal; max-width: 100%; word-break: break-word;
@@ -1486,34 +1488,38 @@ async function deleteEvent(dateKey, lab, eventId) {
     document.getElementById('recurrenteModal').classList.remove('visible');
 }
 
+// Traslado horizontal: conserva fecha, horario, docente, invitados y el ID de la reserva.
+let trasladoEnCurso = false;
 async function moveEvent(eventDiv, targetCell) {
-    const eventId    = eventDiv.dataset.eventId;
-    const oldLab     = eventDiv.dataset.lab;
-    const dateKey    = eventDiv.dataset.dateKey;
-    const newLab     = targetCell.dataset.lab;
-    const newHour    = parseInt(targetCell.dataset.hour);
-    const newHalf    = parseInt(targetCell.dataset.half);
-
+    if (!isAdmin || trasladoEnCurso) { renderDayView(); return; }
+    const eventId = eventDiv.dataset.eventId;
+    const oldLab = eventDiv.dataset.lab;
+    const dateKey = eventDiv.dataset.dateKey;
+    const newLab = targetCell.dataset.lab;
     const ev = events[dateKey]?.[oldLab]?.[eventId];
-    if (!ev) { renderDayView(); return; }
+    if (!ev || !labs.includes(newLab) || oldLab === newLab) { renderDayView(); return; }
 
-    const duration     = (ev.endHour * 60 + (ev.endMinute || 0)) - (ev.startHour * 60 + (ev.startMinute || 0));
-    const newEndTotal  = newHour * 60 + newHalf + duration;
-    const newEndH      = Math.floor(newEndTotal / 60);
-    const newEndM      = newEndTotal % 60;
-
-    if (isWeekend(new Date(dateKey + 'T12:00:00'))) {
-        alert("No se puede mover a un fin de semana."); renderDayView(); return;
+    const hora = (h,m) => `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    const horario = `${hora(ev.startHour,ev.startMinute)} a ${hora(ev.endHour,ev.endMinute)}`;
+    if (hasOverlap(dateKey,newLab,ev.startHour,ev.startMinute,ev.endHour,ev.endMinute,eventId)) {
+        alert(`❌ ${newLab} ya tiene una reserva superpuesta entre ${horario}.`);
+        renderDayView(); return;
     }
-    const excludeId = (newLab === oldLab) ? eventId : null;
-    if (hasOverlap(dateKey, newLab, newHour, newHalf, newEndH, newEndM, excludeId)) {
-        alert("❌ Destino ocupado."); renderDayView(); return;
+    if (!confirm(`¿Trasladar «${ev.title}» de ${oldLab} a ${newLab}?\n\nFecha: ${dateKey}\nHorario: ${horario} (sin cambios)\n\nSe conservarán docente, invitados y demás datos. Si tiene invitación, se actualizará el mismo evento de Google Calendar.`)) {
+        renderDayView(); return;
     }
-    await recAccionSerie(eventId, 'modificar', {
-        laboratorio: newLab,
-        inicio: { hour: newHour, minute: newHalf },
-        fin:    { hour: newEndH, minute: newEndM }
-    });
+    trasladoEnCurso = true;
+    bloquearCreacionPorEdicion();
+    try {
+        // La validación de disponibilidad y el registro de movimientos se realizan
+        // en el flujo de edición existente, que también sincroniza Google Calendar.
+        const ok = await recAccionSerie(eventId,'modificar',{laboratorio:newLab});
+        if (!ok) alert('El traslado no se completó. Revisá el estado de la reserva.');
+    } finally {
+        trasladoEnCurso = false;
+        bloquearCreacionPorEdicion();
+        renderDayView();
+    }
 }
 
 async function clearDay() {
@@ -1708,19 +1714,22 @@ function renderDayView() {
 
 // ======================== DRAG & DROP ========================
 function initializeDragAndDrop() {
-    if (dndInitialized) return; // Solo inicializar una vez (interact usa selector dinámico)
+    if (dndInitialized) return;
     dndInitialized = true;
     interact('.event-block').draggable({
-        inertia: true,
-        modifiers: [ interact.modifiers.restrictRect({ restriction: '#calendarContainer', endOnly: true }) ],
-        autoScroll: true,
+        inertia: false,
+        autoScroll: { container: document.getElementById('calendarContainer'), margin: 45, speed: 350 },
         listeners: {
             start(event) {
+                if (!isAdmin || trasladoEnCurso || event.target.closest('.edit-controls')) return;
                 draggedEvent = event.target;
-                draggedEvent.style.opacity = '0.75';
-                draggedEvent.style.zIndex  = '1000';
+                draggedEvent.style.opacity = '0.65';
+                draggedEvent.style.zIndex = '1000';
+                draggedEvent.style.cursor = 'grabbing';
+                bloquearCreacionPorEdicion();
             },
             move(event) {
+                if (draggedEvent !== event.target) return;
                 const t = event.target;
                 const x = (parseFloat(t.getAttribute('data-x')) || 0) + event.dx;
                 const y = (parseFloat(t.getAttribute('data-y')) || 0) + event.dy;
@@ -1729,20 +1738,29 @@ function initializeDragAndDrop() {
                 t.setAttribute('data-y', y);
             },
             end(event) {
-                const t    = event.target;
-                t.style.opacity  = '1';
-                t.style.zIndex   = '5';
+                const t = event.target;
+                if (draggedEvent !== t) return;
                 const rect = t.getBoundingClientRect();
-                const cell = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-                if (cell && cell.tagName === 'TD' && cell.dataset.lab && cell.dataset.hour) {
-                    moveEvent(t, cell);
+                const x = rect.left + rect.width / 2;
+                const y = Math.max(0,Math.min(window.innerHeight-1,rect.top + Math.min(15,rect.height/2)));
+                // Ocultar temporalmente el bloque para encontrar la celda de destino.
+                t.style.pointerEvents = 'none';
+                const debajo = document.elementFromPoint(x,y);
+                const cell = debajo?.closest('td[data-lab]');
+                t.style.pointerEvents = '';
+                t.style.opacity = '1';
+                t.style.zIndex = '5';
+                t.style.cursor = '';
+                t.style.transform = '';
+                t.removeAttribute('data-x');
+                t.removeAttribute('data-y');
+                draggedEvent = null;
+                bloquearCreacionPorEdicion();
+                if (cell && cell.dataset.lab !== t.dataset.lab) {
+                    moveEvent(t,cell);
                 } else {
                     renderDayView();
                 }
-                t.style.transform = '';
-                t.setAttribute('data-x', 0);
-                t.setAttribute('data-y', 0);
-                draggedEvent = null;
             }
         }
     });
