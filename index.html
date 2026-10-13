@@ -559,6 +559,7 @@ body {
     <div class="modal-header"><h3>✉️ Enviar invitación</h3><button class="modal-close-btn" id="invCerrar">✕</button></div>
     <div id="invDetalle" style="background:#f5f7fa;padding:12px;border-radius:8px;white-space:pre-wrap"></div>
     <label style="font-weight:600">Usuarios registrados</label>
+    <input id="invBuscar" type="search" placeholder="🔎 Buscar por nombre, apellido o correo" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px">
     <div id="invUsuarios" style="max-height:180px;overflow:auto;border:1px solid #ddd;border-radius:8px;padding:10px">Cargando...</div>
     <label style="font-weight:600">Otros correos (separados por coma o renglón)</label>
     <textarea id="invExternos" rows="3" placeholder="persona@ejemplo.com" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px"></textarea>
@@ -1002,14 +1003,22 @@ function hasOverlap(dateKey, lab, sh, sm, eh, em, excludeId = null) {
 
 // ======================== INVITACIONES MANUALES ========================
 let invReservaId = null;
+let invAccion = 'crear';
 const inv = id => document.getElementById(id);
 function cerrarInvitacion() { inv('invitacionModal').classList.remove('visible'); invReservaId = null; }
 inv('invCerrar').onclick = inv('invCancelar').onclick = cerrarInvitacion;
+inv('invBuscar').addEventListener('input', () => {
+    const q = inv('invBuscar').value.trim().toLocaleLowerCase('es');
+    document.querySelectorAll('#invUsuarios label').forEach(el => {
+        el.style.display = el.textContent.toLocaleLowerCase('es').includes(q) ? 'block' : 'none';
+    });
+});
 async function abrirInvitacion(reservaId) {
     if (!isAdmin || !currentUser) return;
     invReservaId = reservaId;
     inv('invEstado').textContent = '';
     inv('invExternos').value = '';
+    inv('invBuscar').value = '';
     inv('invUsuarios').textContent = 'Cargando usuarios...';
     inv('invDetalle').textContent = 'Cargando reserva...';
     inv('invEnviar').disabled = false;
@@ -1020,28 +1029,34 @@ async function abrirInvitacion(reservaId) {
             db.collection('usuarios').get()
         ]);
         if (!reserva.exists) throw new Error('La reserva ya no existe.');
+        if (invReservaId !== reservaId) return;
         const r = reserva.data();
         const horario = x => `${String(x?.hour ?? 0).padStart(2,'0')}:${String(x?.minute ?? 0).padStart(2,'0')}`;
-        inv('invDetalle').textContent = `${r.titulo || 'Reserva'}
-${r.fecha} · ${horario(r.inicio)} a ${horario(r.fin)}
-${r.laboratorio || ''}`;
-        if (r.googleEventId || r.googleInviteState === 'pending') {
+        inv('invDetalle').textContent = `${r.titulo || 'Reserva'}\n${r.fecha} · ${horario(r.inicio)} a ${horario(r.fin)}\n${r.laboratorio || ''}`;
+        invAccion = r.googleEventId ? 'actualizar' : 'crear';
+        inv('invEnviar').textContent = invAccion === 'actualizar' ? 'Actualizar invitación' : 'Enviar invitación';
+        if (r.googleInviteState === 'pending') {
             inv('invEnviar').disabled = true;
-            inv('invEstado').textContent = r.googleEventId
-                ? 'Esta reserva ya tiene una invitación enviada. No se volverá a enviar.'
-                : 'Hay un envío pendiente de verificación. Revisá Google Calendar antes de reintentar.';
+            inv('invEstado').textContent = 'Hay un envío pendiente de verificación. Revisá Google Calendar antes de reintentar.';
+        } else if (invAccion === 'actualizar' && r.googleInviteState !== 'sent') {
+            inv('invEnviar').disabled = true;
+            inv('invEstado').textContent = 'Esta invitación requiere verificación antes de actualizar.';
         }
+        const anteriores = new Set((r.googleInvitados || []).map(x => String(x).toLowerCase()));
         const lista = inv('invUsuarios'); lista.replaceChildren();
         let cantidad = 0;
         usuarios.forEach(doc => {
-            const u = doc.data(), email = String(u.email || '').trim();
+            const u = doc.data(), email = String(u.email || '').trim().toLowerCase();
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
             const etiqueta = document.createElement('label');
             etiqueta.style.cssText = 'display:block;padding:5px 2px;cursor:pointer';
             const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = email; cb.className = 'invUsuario';
+            cb.checked = anteriores.has(email);
             etiqueta.append(cb, document.createTextNode(' ' + (u.nombre || email) + ' (' + email + ')'));
             lista.appendChild(etiqueta); cantidad++;
+            anteriores.delete(email);
         });
+        inv('invExternos').value = [...anteriores].join('\n');
         if (!cantidad) lista.textContent = 'No hay usuarios con correo disponible.';
     } catch (e) {
         inv('invEstado').textContent = 'Error: ' + e.message;
@@ -1057,21 +1072,23 @@ inv('invEnviar').onclick = async () => {
     if (invitados.length > 50 || invitados.some(x => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x))) {
         inv('invEstado').textContent = 'Revisá los correos. Máximo 50 destinatarios.'; return;
     }
-    if (!confirm(`¿Enviar la invitación de esta reserva a ${invitados.length} destinatario(s)?`)) return;
-    inv('invEnviar').disabled = true; inv('invEstado').textContent = 'Enviando invitación...';
+    const accion = invAccion;
+    if (!confirm(`¿${accion === 'actualizar' ? 'Actualizar' : 'Enviar'} la invitación para ${invitados.length} destinatario(s)?`)) return;
+    inv('invEnviar').disabled = true;
+    inv('invEstado').textContent = accion === 'actualizar' ? 'Actualizando invitación...' : 'Enviando invitación...';
     try {
         const token = await currentUser.getIdToken();
         const respuesta = await fetch('/api/calendar', {
             method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-            body:JSON.stringify({accion:'crear',reservaId:invReservaId,invitados})
+            body:JSON.stringify({accion,reservaId:invReservaId,invitados})
         });
         const resultado = await respuesta.json();
-        if (!respuesta.ok || !resultado.ok) throw new Error(resultado.error || 'No se pudo enviar.');
-        inv('invEstado').textContent = 'Invitación enviada correctamente.';
-        alert('Invitación enviada correctamente.'); cerrarInvitacion();
+        if (!respuesta.ok || !resultado.ok) throw new Error(resultado.error || 'No se pudo procesar.');
+        alert(accion === 'actualizar' ? 'Invitación actualizada correctamente.' : 'Invitación enviada correctamente.');
+        cerrarInvitacion();
     } catch (e) {
-        inv('invEstado').textContent = 'No se pudo confirmar el envío: '+e.message+'\nRevisá Google Calendar antes de volver a intentar.';
-    }
+        inv('invEstado').textContent = 'No se pudo confirmar la operación: '+e.message+'\nRevisá Google Calendar antes de reintentar.';
+    } finally { inv('invEnviar').disabled = false; }
 };
 
 // ======================== OPERACIONES DE EVENTOS (UI) ========================
