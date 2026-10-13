@@ -955,35 +955,51 @@ document.getElementById('closeMovimientosModal').onclick = () => document.getEle
 document.getElementById('btnAdminUsers').onclick  = () => loadAdminPanel();
 document.getElementById('closeAdminModal').onclick = () => document.getElementById('adminModal').classList.remove('visible');
 
-async function loadAdminPanel() {
-    if (!isAdmin) { alert("Sin permisos."); return; }
-    const snap = await db.collection('usuarios').get();
-    let html = '<table class="admin-table"><thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Acción</th></tr></thead><tbody>';
-    snap.forEach(doc => {
-        const d = doc.data();
-        html += `<tr>
-            <td>${d.email || '—'}</td>
-            <td>${d.nombre || '—'}</td>
-            <td>
-              <select id="rol-${doc.id}">
-                <option value="user"  ${d.rol === 'user'  ? 'selected' : ''}>user</option>
-                <option value="admin" ${d.rol === 'admin' ? 'selected' : ''}>admin</option>
-              </select>
-            </td>
-            <td><button onclick="cambiarRol('${doc.id}')">Actualizar</button></td>
-          </tr>`;
-    });
-    html += '</tbody></table>';
-    document.getElementById('userList').innerHTML = html;
-    document.getElementById('adminModal').classList.add('visible');
+async function usuariosAccion(accion,uid){
+    const token=await currentUser.getIdToken();
+    const respuesta=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({accion,uid})});
+    const resultado=await respuesta.json();
+    if(!respuesta.ok||!resultado.ok)throw new Error(resultado.error||'No se pudo procesar el usuario');
+    return resultado;
 }
-
-window.cambiarRol = async (uid) => {
-    const rol = document.getElementById(`rol-${uid}`).value;
-    await db.collection('usuarios').doc(uid).update({ rol });
-    alert("Rol actualizado correctamente.");
-    loadAdminPanel();
-};
+async function loadAdminPanel() {
+    if(!isAdmin){alert('Sin permisos.');return;}
+    const destino=document.getElementById('userList');
+    destino.textContent='Cargando usuarios...';
+    document.getElementById('adminModal').classList.add('visible');
+    try{
+        const snap=await db.collection('usuarios').get();
+        destino.replaceChildren();
+        const tabla=document.createElement('table');tabla.className='admin-table';
+        const cab=document.createElement('tr');
+        ['Email','Nombre','Rol','Estado','Acciones'].forEach(x=>{const th=document.createElement('th');th.textContent=x;cab.append(th);});
+        tabla.append(cab);
+        snap.forEach(doc=>{
+            const u=doc.data(),fila=document.createElement('tr');
+            const celda=t=>{const td=document.createElement('td');td.textContent=t;fila.append(td);return td;};
+            celda(u.email||'—');celda(u.nombre||'—');
+            const rol=celda('');const sel=document.createElement('select');
+            ['user','admin'].forEach(v=>{const op=document.createElement('option');op.value=v;op.textContent=v;op.selected=u.rol===v;sel.append(op);});rol.append(sel);
+            celda(u.activo===false?'Desactivado':'Activo');
+            const acciones=celda('');
+            const boton=(texto,fn)=>{const b=document.createElement('button');b.textContent=texto;b.style.margin='3px';b.onclick=fn;acciones.append(b);};
+            boton('Actualizar rol',async()=>{try{await db.collection('usuarios').doc(doc.id).update({rol:sel.value});await loadAdminPanel();}catch(e){alert(e.message);}});
+            if(doc.id!==currentUser.uid){
+                boton(u.activo===false?'Reactivar':'Desactivar',async()=>{
+                    const accion=u.activo===false?'reactivar':'desactivar';
+                    if(!confirm(`¿${accion} a ${u.email||u.nombre}?`))return;
+                    try{await usuariosAccion(accion,doc.id);await loadAdminPanel();}catch(e){alert(e.message);}
+                });
+                boton('Eliminar',async()=>{
+                    if(!confirm(`¿Dar de baja definitivamente a ${u.email||u.nombre}?\nSe conservarán las reservas y movimientos históricos. No podrá volver a registrarse con ese correo.`))return;
+                    try{await usuariosAccion('eliminar',doc.id);await loadAdminPanel();}catch(e){alert(e.message);}
+                });
+            }
+            tabla.append(fila);
+        });
+        destino.append(tabla);
+    }catch(e){destino.textContent='Error: '+e.message;}
+}
 
 // ======================== LÓGICA DE SUPERPOSICIÓN ========================
 function hasOverlap(dateKey, lab, sh, sm, eh, em, excludeId = null) {
@@ -1206,48 +1222,52 @@ async function recGuardar(){
 }
 recEl('recGuardar').onclick=recGuardar;
 recEl('btnRecurrente').onclick=()=>recAbrir(getCurrentDateKey(),labs[0],'',9,0,10,0);
+async function calendarAccion(accion,reservaId,cambios) {
+    const token = await currentUser.getIdToken();
+    const r = await fetch('/api/calendar', {
+        method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({accion,reservaId,...(cambios?{cambios}:{})})
+    });
+    const resultado = await r.json();
+    if(!r.ok || !resultado.ok)throw new Error(resultado.error || 'No se pudo sincronizar con Google Calendar');
+    return resultado;
+}
 async function recAccionSerie(eventId,accion,data){
     if(!isAdmin)return;
     try{
         const ref=db.collection('reservas').doc(eventId),snap=await ref.get();
         if(!snap.exists)throw new Error('La reserva ya no existe.');
-        if (snap.data().googleEventId || snap.data().googleInviteState === 'pending')
-            throw new Error('Esta reserva tiene una invitación de Google Calendar. No se puede modificar ni eliminar hasta habilitar la actualización/cancelación de invitaciones.');
         const serie=snap.data().serieId;
-        if(!serie)return accion==='eliminar'?eliminarReserva(eventId):actualizarReserva(eventId,data);
-        const opcion=prompt('Esta reserva pertenece a una serie.\n1 → Solo esta fecha\n2 → Toda la serie\n0 → Cancelar','1');
-        if(opcion!=='1'&&opcion!=='2')return;
-        if(opcion==='1')return accion==='eliminar'?eliminarReserva(eventId):actualizarReserva(eventId,data);
-        const docs=(await db.collection('reservas').where('serieId','==',serie).get()).docs;
+        let docs=[snap];
+        if(serie){
+            const opcion=prompt('Esta reserva pertenece a una serie.\n1 → Solo esta fecha\n2 → Toda la serie\n0 → Cancelar','1');
+            if(opcion!=='1'&&opcion!=='2')return;
+            if(opcion==='2')docs=(await db.collection('reservas').where('serieId','==',serie).get()).docs;
+        }
         if(!docs.length)return;
-        if (docs.some(d => d.data().googleEventId || d.data().googleInviteState === 'pending'))
-            throw new Error('La serie contiene invitaciones enviadas. No se puede modificar ni eliminar hasta habilitar su actualización/cancelación.');
-        if(accion==='eliminar'){
-            if(!confirm('¿Eliminar las '+docs.length+' reservas de la serie?'))return;
-        } else {
-            const nuevos=[];
-            for(const doc of docs){const original=doc.data();nuevos.push({id:doc.id,fecha:original.fecha,lab:data.laboratorio||original.laboratorio,inicio:data.inicio||original.inicio,fin:data.fin||original.fin});}
-            // Comprobar fechas destino si cambian laboratorio u horario.
-            if(data.laboratorio||data.inicio||data.fin){
-                const ids=docs.map(d=>d.id);
-                for(const r of nuevos){const ocupadas=await recComprobarFechas([r.fecha],r.lab,r.inicio,r.fin,ids);
-                    if(ocupadas.length)throw new Error('Conflicto en '+r.fecha+'. No se modificó la serie.');}
+        if(docs.some(d=>d.data().googleInviteState==='pending'))throw new Error('Hay invitaciones pendientes de verificación. Revisá Google Calendar.');
+        if(accion==='eliminar'&&!confirm(`¿Eliminar ${docs.length} reserva(s)? Se cancelarán también sus invitaciones de Google Calendar.`))return;
+        if(accion==='modificar'&&docs.length>1&&(data.laboratorio||data.inicio||data.fin)){
+            const ids=docs.map(d=>d.id);
+            for(const d of docs){
+                const r=d.data(),lab=data.laboratorio||r.laboratorio,inicio=data.inicio||r.inicio,fin=data.fin||r.fin;
+                const conflictos=await recComprobarFechas([r.fecha],lab,inicio,fin,ids);
+                if(conflictos.length)throw new Error('Conflicto en '+r.fecha+'. No se modificó la serie.');
             }
         }
-        // 2 escrituras por fecha; grupos de hasta 200 reservas por lote.
-        for(let i=0;i<docs.length;i+=200){
-            const batch=db.batch();
-            docs.slice(i,i+200).forEach(doc=>{
-                const antes=doc.data(),despues={...antes,...data};
-                const mov=db.collection('movimientos').doc();
-                if(accion==='eliminar'){batch.delete(doc.ref);batch.set(mov,nuevoMovimiento('eliminar',doc.id,antes,null));}
-                else{batch.update(doc.ref,{...data,modificadoPor:currentUser.uid,modificadoPorEmail:currentUser.email||'',updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-                    batch.set(mov,nuevoMovimiento('modificar',doc.id,antes,despues));}
-            });
-            await batch.commit();
+        let procesadas=0;
+        for(const doc of docs){
+            const r=doc.data();
+            if(r.googleEventId){
+                await calendarAccion(accion==='eliminar'?'cancelar':'modificar',doc.id,accion==='modificar'?data:null);
+            }else{
+                if(accion==='eliminar')await eliminarReserva(doc.id);
+                else await actualizarReserva(doc.id,data);
+            }
+            procesadas++;
         }
-        alert('Serie actualizada: '+docs.length+' reservas.');
-    }catch(e){console.error(e);alert('No se pudo actualizar la serie: '+e.message);}
+        if(docs.length>1)alert(`Operación completada: ${procesadas} de ${docs.length} reservas.`);
+    }catch(e){console.error(e);alert('No se pudo completar la operación: '+e.message+'\nSi era una serie, algunas fechas podrían haberse procesado. Revisá el calendario antes de repetir.');}
 }
 
 async function createSingleEvent(lab,hour,half){
@@ -1907,6 +1927,16 @@ document.getElementById('closeHorariosModal').onclick = () => document.getElemen
 auth.onAuthStateChanged(async user => {
     if (user) {
         currentUser = user;
+        // Control de bajas antes de permitir el ingreso o crear el perfil.
+        try {
+            const token = await user.getIdToken();
+            const r = await fetch('/api/users', {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({accion:'estado'})});
+            if(!r.ok) { const x=await r.json();throw new Error(x.error||'Acceso no autorizado'); }
+        } catch(e) {
+            alert('No se pudo ingresar: '+e.message);
+            await auth.signOut();
+            return;
+        }
         // Verificar/crear documento de usuario en Firestore
         const userDocRef = db.collection('usuarios').doc(user.uid);
         const userDoc = await userDocRef.get();
