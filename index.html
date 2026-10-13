@@ -478,6 +478,7 @@ body {
       <button class="btn" id="btnHorarios">👨‍🏫 Horarios</button>
       <button class="btn" id="btnLimpiar" style="display: none;">🧹 Limpiar día</button>
       <button class="btn" id="btnAdminUsers" style="display:none;">👥 Usuarios</button>
+        <button class="btn" id="btnMovimientos" style="display:none;background:#2c3e50;">📜 Movimientos</button>
       <button class="btn" id="btnLogout">🚪 Salir</button>
     </div>
   </div>
@@ -509,6 +510,20 @@ body {
       <button class="modal-close-btn" id="closeModal">✕</button>
     </div>
     <div id="monthCalendar" style="flex:1;min-height:0;"></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL MOVIMIENTOS ===================== -->
+<div id="movimientosModal" class="modal-overlay">
+  <div class="modal-box" style="width:95%;max-width:1150px;max-height:85vh;overflow-y:auto;">
+    <div class="modal-header"><h3>📜 Movimientos</h3><button class="modal-close-btn" id="closeMovimientosModal">✕</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+      <input id="movFiltro" placeholder="Buscar usuario, reserva, laboratorio..." style="flex:1;min-width:200px;padding:9px;border:1px solid #ccc;border-radius:6px;">
+      <select id="movAccion" style="padding:9px;border:1px solid #ccc;border-radius:6px;"><option value="">Todas las acciones</option><option value="crear">Creaciones</option><option value="modificar">Modificaciones</option><option value="eliminar">Eliminaciones</option></select>
+      <button class="btn" id="movRecargar">Actualizar</button>
+    </div>
+    <div id="movimientosList"></div>
+    <p style="font-size:12px;color:#777;margin-top:10px;">Se muestran los 300 movimientos más recientes.</p>
   </div>
 </div>
 
@@ -637,33 +652,66 @@ function subscribeToEvents() {
     }, err => console.error("Error en listener reservas:", err));
 }
 
+// ======================== RESERVAS + MOVIMIENTOS ATÓMICOS ========================
+// Cada movimiento se registra junto con el cambio de reserva, en una sola transacción.
+function identidadMovimiento() {
+    if (!currentUser) throw new Error('Necesitás iniciar sesión.');
+    return { usuarioUid: currentUser.uid, usuarioEmail: currentUser.email || '',
+             usuarioNombre: currentUser.displayName || '' };
+}
+function resumenReserva(d) {
+    if (!d) return null;
+    return { titulo: d.titulo || '', laboratorio: d.laboratorio || '', fecha: d.fecha || '',
+             inicio: d.inicio || null, fin: d.fin || null };
+}
+function nuevoMovimiento(accion, id, antes, despues) {
+    return { accion, reservaId: id, antes: resumenReserva(antes), despues: resumenReserva(despues),
+             ...identidadMovimiento(), timestamp: firebase.firestore.FieldValue.serverTimestamp() };
+}
 async function agregarReserva(fecha, lab, titulo, sh, sm, eh, em, color) {
     try {
-        const ref = await db.collection('reservas').add({
-            fecha, laboratorio: lab, titulo,
-            inicio: { hour: sh, minute: sm },
-            fin:    { hour: eh, minute: em },
-            color, creadoPor: currentUser?.uid || 'anonimo',
+        const ref = db.collection('reservas').doc();
+        const movRef = db.collection('movimientos').doc();
+        const data = { fecha, laboratorio: lab, titulo,
+            inicio: { hour: sh, minute: sm }, fin: { hour: eh, minute: em }, color,
+            creadoPor: currentUser.uid, creadoPorEmail: currentUser.email || '',
+            modificadoPor: currentUser.uid, modificadoPorEmail: currentUser.email || '',
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        const batch = db.batch();
+        batch.set(ref, data);
+        batch.set(movRef, nuevoMovimiento('crear', ref.id, null, data));
+        await batch.commit();
         return ref.id;
-    } catch(e) { console.error(e); alert("Error al guardar reserva."); return null; }
+    } catch(e) { console.error(e); alert('Error al guardar reserva y movimiento: ' + e.message); return null; }
 }
-
 async function actualizarReserva(id, data) {
     try {
-        await db.collection('reservas').doc(id).update({
-            ...data,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        const ref = db.collection('reservas').doc(id);
+        const movRef = db.collection('movimientos').doc();
+        await db.runTransaction(async tx => {
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('La reserva ya no existe.');
+            const antes = snap.data();
+            const despues = { ...antes, ...data };
+            tx.update(ref, { ...data, modificadoPor: currentUser.uid,
+                modificadoPorEmail: currentUser.email || '',
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+            tx.set(movRef, nuevoMovimiento('modificar', id, antes, despues));
         });
-    } catch(e) { console.error(e); alert("Error al actualizar reserva."); }
+    } catch(e) { console.error(e); alert('Error al actualizar reserva y movimiento: ' + e.message); }
 }
-
 async function eliminarReserva(id) {
     try {
-        await db.collection('reservas').doc(id).delete();
-    } catch(e) { console.error(e); alert("Error al eliminar reserva."); }
+        const ref = db.collection('reservas').doc(id);
+        const movRef = db.collection('movimientos').doc();
+        await db.runTransaction(async tx => {
+            const snap = await tx.get(ref);
+            if (!snap.exists) throw new Error('La reserva ya no existe.');
+            tx.delete(ref);
+            tx.set(movRef, nuevoMovimiento('eliminar', id, snap.data(), null));
+        });
+    } catch(e) { console.error(e); alert('Error al eliminar reserva y movimiento: ' + e.message); }
 }
 
 // Migración única: mueve datos del formato viejo (un solo doc) al nuevo (colección)
@@ -755,6 +803,63 @@ document.getElementById('btnLogout').onclick = async () => {
     await auth.signOut();
 };
 
+
+// ======================== PANEL DE MOVIMIENTOS (admin) ========================
+let movimientosCache = [];
+function textoSeguro(valor) { return String(valor ?? ''); }
+function horarioMovimiento(d) {
+    if (!d) return '—';
+    const f = x => x ? `${x.hour}:${String(x.minute || 0).padStart(2,'0')}` : '?';
+    return `${f(d.inicio)}–${f(d.fin)}`;
+}
+function pintarMovimientos() {
+    const destino = document.getElementById('movimientosList');
+    destino.replaceChildren();
+    const q = document.getElementById('movFiltro').value.toLowerCase().trim();
+    const accion = document.getElementById('movAccion').value;
+    const tabla = document.createElement('table'); tabla.className = 'admin-table';
+    const cabecera = document.createElement('thead');
+    const filaCab = document.createElement('tr');
+    ['Fecha y hora','Usuario','Acción','Antes','Después'].forEach(t => {
+        const th = document.createElement('th'); th.textContent=t; filaCab.appendChild(th);
+    });
+    cabecera.appendChild(filaCab); tabla.appendChild(cabecera);
+    const cuerpo = document.createElement('tbody');
+    let total = 0;
+    movimientosCache.forEach(d => {
+        const a = d.antes || {}, b = d.despues || {};
+        const searchable = [d.usuarioEmail,d.usuarioNombre,d.accion,a.titulo,b.titulo,a.laboratorio,b.laboratorio,a.fecha,b.fecha].join(' ').toLowerCase();
+        if (accion && d.accion !== accion) return;
+        if (q && !searchable.includes(q)) return;
+        total++;
+        const tr = document.createElement('tr');
+        const fecha = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleString('es-AR', {timeZone:'America/Argentina/Buenos_Aires'}) : '—';
+        const contenido = [fecha, `${d.usuarioNombre || '—'} (${d.usuarioEmail || '—'})`, d.accion || '—',
+            d.antes ? `${a.titulo || ''} | ${a.laboratorio || ''} | ${a.fecha || ''} | ${horarioMovimiento(a)}` : '—',
+            d.despues ? `${b.titulo || ''} | ${b.laboratorio || ''} | ${b.fecha || ''} | ${horarioMovimiento(b)}` : '—'];
+        contenido.forEach(valor => { const td=document.createElement('td'); td.textContent=textoSeguro(valor); tr.appendChild(td); });
+        cuerpo.appendChild(tr);
+    });
+    tabla.appendChild(cuerpo);
+    if (!total) destino.textContent = 'No se encontraron movimientos.';
+    else destino.appendChild(tabla);
+}
+async function cargarMovimientos() {
+    if (!isAdmin) { alert('Sin permisos.'); return; }
+    const destino = document.getElementById('movimientosList');
+    destino.textContent = 'Cargando movimientos...';
+    document.getElementById('movimientosModal').classList.add('visible');
+    try {
+        const snap = await db.collection('movimientos').orderBy('timestamp','desc').limit(300).get();
+        movimientosCache = snap.docs.map(doc => doc.data());
+        pintarMovimientos();
+    } catch(e) { console.error(e); destino.textContent = 'Error al consultar movimientos: ' + e.message; }
+}
+document.getElementById('btnMovimientos').onclick = cargarMovimientos;
+document.getElementById('movRecargar').onclick = cargarMovimientos;
+document.getElementById('movFiltro').addEventListener('input', pintarMovimientos);
+document.getElementById('movAccion').addEventListener('change', pintarMovimientos);
+document.getElementById('closeMovimientosModal').onclick = () => document.getElementById('movimientosModal').classList.remove('visible');
 
 // ======================== PANEL DE USUARIOS (admin) ========================
 document.getElementById('btnAdminUsers').onclick  = () => loadAdminPanel();
@@ -902,16 +1007,25 @@ async function moveEvent(eventDiv, targetCell) {
 }
 
 async function clearDay() {
+    if (!isAdmin) { alert('Solo administradores pueden limpiar el día.'); return; }
     const dateKey = getCurrentDateKey();
     if (!confirm(`¿Eliminar TODAS las reservas del ${formatDateLocal(currentDate)}?`)) return;
-    const snap = await db.collection('reservas').where('fecha', '==', dateKey).get();
-    if (snap.empty) return;
-    const docs = snap.docs;
-    for (let i = 0; i < docs.length; i += 450) {
-        const batch = db.batch();
-        docs.slice(i, i + 450).forEach(d => batch.delete(d.ref));
-        await batch.commit();
-    }
+    try {
+        const snap = await db.collection('reservas').where('fecha', '==', dateKey).get();
+        if (snap.empty) return;
+        // Cada lote guarda eliminaciones y sus movimientos de manera atómica.
+        // Lotes separados pueden confirmarse independientemente.
+        for (let i = 0; i < snap.docs.length; i += 200) {
+            const batch = db.batch();
+            snap.docs.slice(i, i + 200).forEach(doc => {
+                const movRef = db.collection('movimientos').doc();
+                batch.delete(doc.ref);
+                batch.set(movRef, nuevoMovimiento('eliminar', doc.id, doc.data(), null));
+            });
+            await batch.commit();
+        }
+        alert('Reservas eliminadas y movimientos registrados.');
+    } catch(e) { console.error(e); alert('No se pudo completar la limpieza: ' + e.message); }
 }
 
 // ======================== CONSTRUCCIÓN DE TABLA ========================
@@ -1465,6 +1579,7 @@ auth.onAuthStateChanged(async user => {
         document.getElementById('userEmailDisplay').textContent = user.email;
         document.getElementById('userRoleDisplay').textContent  = isAdmin ? '⭐ Administrador' : '👤 Usuario';
         document.getElementById('btnAdminUsers').style.display  = isAdmin ? 'inline-block' : 'none';
+        document.getElementById('btnMovimientos').style.display = isAdmin ? 'inline-block' : 'none';
         document.getElementById('btnHorarios').style.display = isAdmin ? 'inline-block' : 'none';
 
         // Construir UI base (solo la primera vez)
