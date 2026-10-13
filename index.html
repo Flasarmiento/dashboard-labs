@@ -599,6 +599,10 @@ let selectionEnd     = { hour: null, half: null };
 let selectedLab      = null;
 let draggedEvent     = null;
 let unsubscribeEvents = null;
+let activeRangeKey = null;
+let unsubscribeMonth = null;
+let monthEvents = {};
+let activeMonthRangeKey = null;
 let dndInitialized   = false;
 
 // ======================== HELPERS DE FECHA (ZONA GMT-3) ========================
@@ -624,32 +628,68 @@ function generateEventId() { return 'evt_' + Date.now() + '_' + Math.random().to
 // Cada reserva es un documento independiente → no hay riesgo de que un PC pise los datos de otro.
 // El listener onSnapshot mantiene todos los clientes sincronizados en tiempo real.
 
+// Una sola escucha para el mes visualizado, con margen para semanas entre meses.
+// Mantiene los 13 laboratorios visibles; solo limita documentos descargados.
+function rangoMes(fecha) {
+    const inicio = new Date(fecha.getFullYear(), fecha.getMonth(), 1, 12);
+    inicio.setDate(inicio.getDate() - 7);
+    const fin = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 1, 12);
+    fin.setDate(fin.getDate() + 7);
+    return [getLocalDateKey(inicio), getLocalDateKey(fin)];
+}
+function convertirReservas(snapshot) {
+    const resultado = {};
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        if (!data.fecha || !data.laboratorio) return;
+        const { fecha, laboratorio: lab } = data;
+        if (!resultado[fecha]) resultado[fecha] = {};
+        if (!resultado[fecha][lab]) resultado[fecha][lab] = {};
+        resultado[fecha][lab][doc.id] = {
+            id: doc.id, title: data.titulo || '',
+            startHour: data.inicio?.hour || 0, startMinute: data.inicio?.minute || 0,
+            endHour: data.fin?.hour || 0, endMinute: data.fin?.minute || 0,
+            color: data.color || colors[labs.indexOf(lab)] || '#153244',
+            creadoPor: data.creadoPor
+        };
+    });
+    return resultado;
+}
 function subscribeToEvents() {
-    if (unsubscribeEvents) unsubscribeEvents();
-    unsubscribeEvents = db.collection('reservas').onSnapshot(snapshot => {
-        events = {};
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            if (!data.fecha || !data.laboratorio) return;
-            const { fecha, laboratorio: lab } = data;
-            if (!events[fecha])       events[fecha]       = {};
-            if (!events[fecha][lab])  events[fecha][lab]  = {};
-            events[fecha][lab][doc.id] = {
-                id:          doc.id,
-                title:       data.titulo       || '',
-                startHour:   data.inicio?.hour  || 0,
-                startMinute: data.inicio?.minute || 0,
-                endHour:     data.fin?.hour      || 0,
-                endMinute:   data.fin?.minute    || 0,
-                color:       data.color         || colors[labs.indexOf(lab)] || '#153244',
-                creadoPor:   data.creadoPor
-            };
-        });
-        // Re-render automático para TODOS los clientes conectados
-        if (currentView === 'diario') renderDayView();
-        else renderWeekView();
-        if (monthCalendar) monthCalendar.refetchEvents();
-    }, err => console.error("Error en listener reservas:", err));
+    if (!currentUser) return;
+    const [inicio, fin] = rangoMes(currentDate);
+    const clave = inicio + '|' + fin;
+    if (unsubscribeEvents && activeRangeKey === clave) return;
+    if (unsubscribeEvents) { unsubscribeEvents(); unsubscribeEvents = null; }
+    activeRangeKey = clave;
+    events = {};
+    unsubscribeEvents = db.collection('reservas')
+        .where('fecha', '>=', inicio).where('fecha', '<', fin)
+        .onSnapshot(snapshot => {
+            if (activeRangeKey !== clave) return;
+            events = convertirReservas(snapshot);
+            if (currentView === 'diario') renderDayView();
+            else renderWeekView();
+        }, err => console.error('Error en reservas del período:', err));
+}
+function cerrarEscuchaMes() {
+    if (unsubscribeMonth) { unsubscribeMonth(); unsubscribeMonth = null; }
+    activeMonthRangeKey = null;
+    monthEvents = {};
+}
+function escucharMesCalendario(inicio, fin) {
+    if (!currentUser) return;
+    const clave = inicio + '|' + fin;
+    if (unsubscribeMonth && activeMonthRangeKey === clave) return;
+    cerrarEscuchaMes();
+    activeMonthRangeKey = clave;
+    unsubscribeMonth = db.collection('reservas')
+        .where('fecha', '>=', inicio).where('fecha', '<', fin)
+        .onSnapshot(snapshot => {
+            if (activeMonthRangeKey !== clave) return;
+            monthEvents = convertirReservas(snapshot);
+            if (monthCalendar) monthCalendar.refetchEvents();
+        }, err => console.error('Error en calendario mensual:', err));
 }
 
 // ======================== RESERVAS + MOVIMIENTOS ATÓMICOS ========================
@@ -800,6 +840,8 @@ document.getElementById('googleLoginBtn').onclick = async () => {
 
 document.getElementById('btnLogout').onclick = async () => {
     if (unsubscribeEvents) { unsubscribeEvents(); unsubscribeEvents = null; }
+    activeRangeKey = null;
+    cerrarEscuchaMes();
     await auth.signOut();
 };
 
@@ -897,11 +939,12 @@ window.cambiarRol = async (uid) => {
 
 // ======================== LÓGICA DE SUPERPOSICIÓN ========================
 function hasOverlap(dateKey, lab, sh, sm, eh, em, excludeId = null) {
-    if (!events[dateKey] || !events[dateKey][lab]) return false;
+    const reservaDia = events[dateKey]?.[lab] || monthEvents[dateKey]?.[lab];
+    if (!reservaDia) return false;
     const ns = sh * 60 + sm, ne = eh * 60 + em;
-    for (const id in events[dateKey][lab]) {
+    for (const id in reservaDia) {
         if (id === excludeId) continue;
-        const ev = events[dateKey][lab][id];
+        const ev = reservaDia[id];
         const es = ev.startHour * 60 + (ev.startMinute || 0);
         const ee = ev.endHour   * 60 + (ev.endMinute   || 0);
         if (ns < ee && ne > es) return true;
@@ -943,7 +986,7 @@ async function createRangeEvent(lab, sh, sm, eh, em, durationMin) {
 }
 
 async function editEvent(dateKey, lab, eventId) {
-    const ev = events[dateKey]?.[lab]?.[eventId];
+    const ev = events[dateKey]?.[lab]?.[eventId] || monthEvents[dateKey]?.[lab]?.[eventId];
     if (!ev) return;
     const newTitle = prompt("Editar título:", ev.title);
     if (newTitle && newTitle !== ev.title) {
@@ -970,7 +1013,7 @@ async function adjustEventTime(dateKey, lab, eventId, ev) {
 }
 
 async function deleteEvent(dateKey, lab, eventId) {
-    if (!events[dateKey]?.[lab]?.[eventId]) return;
+    if (!events[dateKey]?.[lab]?.[eventId] && !monthEvents[dateKey]?.[lab]?.[eventId]) return;
     if (confirm("¿Eliminar este bloque de reserva?")) {
         await eliminarReserva(eventId);
     }
@@ -1241,6 +1284,19 @@ function renderWeekView() {
         initialView: 'timeGridWeek',
         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek' },
         events: fcEvents,
+        initialDate: getLocalDateKey(currentDate),
+        datesSet: function(info) {
+            const centro = new Date(info.start);
+            centro.setDate(centro.getDate() + 3);
+            const semanaActual = new Date(currentDate);
+            semanaActual.setDate(semanaActual.getDate() - ((semanaActual.getDay() || 7) - 1));
+            if (getLocalDateKey(info.start) !== getLocalDateKey(semanaActual)) {
+                currentDate = centro;
+                document.getElementById('currentDateDisplay').textContent = formatDateLocal(currentDate);
+                document.getElementById('datePicker').value = getLocalDateKey(currentDate);
+                subscribeToEvents();
+            }
+        },
         height: '100%',
         slotMinTime: '08:00:00',
         slotMaxTime: '22:00:00',
@@ -1287,6 +1343,7 @@ function openModalLab(lab) {
     document.getElementById("modalTitle").textContent = `📅 Calendario Mensual — ${lab}`;
     document.getElementById("monthCalendar").innerHTML = "";
 
+    cerrarEscuchaMes();
     if (monthCalendar) { monthCalendar.destroy(); monthCalendar = null; }
 
     const calEl = document.createElement("div");
@@ -1301,10 +1358,10 @@ function openModalLab(lab) {
         slotDuration: '00:30:00',
         events: function(fetchInfo, successCallback) {
             const fcEvents = [];
-            for (const date in events) {
-                if (!events[date][lab]) continue;
-                for (const evId in events[date][lab]) {
-                    const ev = events[date][lab][evId];
+            for (const date in monthEvents) {
+                if (!monthEvents[date][lab]) continue;
+                for (const evId in monthEvents[date][lab]) {
+                    const ev = monthEvents[date][lab][evId];
                     fcEvents.push({
                         id:    ev.id,
                         title: ev.title,
@@ -1317,6 +1374,9 @@ function openModalLab(lab) {
             }
             successCallback(fcEvents);
         },
+        datesSet: function(info) {
+            escucharMesCalendario(getLocalDateKey(info.start), getLocalDateKey(info.end));
+        },
         eventClick: function(info) {
             const lab2    = info.event.extendedProps.lab;
             const date    = info.event.extendedProps.date;
@@ -1325,7 +1385,7 @@ function openModalLab(lab) {
             if (action === "1") {
                 editEvent(date, lab2, eventId);
             } else if (action === "2") {
-                const ev = events[date]?.[lab2]?.[eventId];
+                const ev = monthEvents[date]?.[lab2]?.[eventId];
                 if (ev) adjustEventTime(date, lab2, eventId, ev);
             } else if (action === "3") {
                 deleteEvent(date, lab2, eventId);
@@ -1478,6 +1538,7 @@ function cancelRangeSelection() {
 function updateDateDisplay() {
     document.getElementById("currentDateDisplay").textContent = formatDateLocal(currentDate);
     document.getElementById("datePicker").value = getLocalDateKey(currentDate);
+    subscribeToEvents();
     if (currentView === 'diario') renderDayView();
     else renderWeekView();
 }
@@ -1522,6 +1583,7 @@ document.querySelectorAll("[data-view]").forEach(btn => {
         const isDiario = currentView === 'diario';
         document.getElementById("dayViewContainer").style.display  = isDiario ? 'flex' : 'none';
         document.getElementById("weekViewContainer").style.display = isDiario ? 'none' : 'block';
+        subscribeToEvents();
         if (isDiario) renderDayView();
         else renderWeekView();
     };
@@ -1544,13 +1606,19 @@ document.getElementById('btnHorarios').onclick = () => {
         '<iframe src="horarios_detalle.html" style="width:100%; height:75vh; border:none;"></iframe>';
     document.getElementById("horariosModal").classList.add('visible');
 };
-document.getElementById('closeModal').onclick        = () => document.getElementById('modal').classList.remove('visible');
+document.getElementById('closeModal').onclick = () => {
+    document.getElementById('modal').classList.remove('visible');
+    cerrarEscuchaMes();
+};
 document.getElementById('closeHorariosModal').onclick = () => document.getElementById('horariosModal').classList.remove('visible');
 
 // Cerrar modales al hacer click fuera
-['modal','horariosModal','adminModal'].forEach(id => {
+['modal','horariosModal','adminModal','movimientosModal'].forEach(id => {
     document.getElementById(id).addEventListener('click', e => {
-        if (e.target.id === id) document.getElementById(id).classList.remove('visible');
+        if (e.target.id === id) {
+            document.getElementById(id).classList.remove('visible');
+            if (id === 'modal') cerrarEscuchaMes();
+        }
     });
 });
 
@@ -1604,6 +1672,8 @@ auth.onAuthStateChanged(async user => {
         window._uiBuilt = false;
         dndInitialized = false;
         if (unsubscribeEvents) { unsubscribeEvents(); unsubscribeEvents = null; }
+        activeRangeKey = null;
+        cerrarEscuchaMes();
         if (weekCalendar)   { weekCalendar.destroy(); weekCalendar = null; }
         if (monthCalendar)  { monthCalendar.destroy(); monthCalendar = null; }
         events = {};
