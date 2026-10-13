@@ -557,8 +557,8 @@ const auth  = firebase.auth();
 const db    = firebase.firestore();
 
 // ======================== CONSTANTES ========================
-const labs   = ["SUM","HYS","TEXTIL","RA","ROBÓTICA","IA","FINANZAS","TRANSPORTE","LOGÍSTICA","HYS 2","STREAMING","ENERGÍA","SUSTENTABILIDAD"];
-const colors = ["#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEEAD","#D4A5A5","#9B59B6","#3498DB","#E67E22","#2ECC71","#E74C3C","#1ABC9C","#F1C40F"];
+const labs   = ["SUM","HYS","TEXTIL","RA","ROBÓTICA","IA","FINANZAS","TRANSPORTE","LOGÍSTICA","HYS 2","STREAMING","ENERGÍA","SUSTENTABILIDAD","SALA DE REUNIONES"];
+const colors = ["#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEEAD","#D4A5A5","#9B59B6","#3498DB","#E67E22","#2ECC71","#E74C3C","#1ABC9C","#F1C40F","#607D8B"];
 const hours  = Array.from({length:14}, (_,i) => 8 + i); // 8:00 a 21:00
 
 const labInfo = {
@@ -574,7 +574,8 @@ const labInfo = {
     "HYS 2":           { piso:"2", descripcion:"HYS2",           capacidad:"3",      observaciones:"Simuladores",      horarios:"Viera/García" },
     "STREAMING":       { piso:"2", descripcion:"STREAMING",       capacidad:"4",      observaciones:"Micrófonos",       horarios:"Sin horarios asignados" },
     "ENERGÍA":         { piso:"2", descripcion:"ENERGÍA",         capacidad:"24",     observaciones:"22 notebook",      horarios:"Salvo (Tarde/Noche), González (Mañ)" },
-    "SUSTENTABILIDAD": { piso:"2", descripcion:"SUSTENTABILIDAD", capacidad:"12",     observaciones:"Notebook",         horarios:"Ramirez, Haupt" }
+    "SUSTENTABILIDAD": { piso:"2", descripcion:"SUSTENTABILIDAD", capacidad:"12",     observaciones:"Notebook",         horarios:"Ramirez, Haupt" },
+    "SALA DE REUNIONES": { piso:"A confirmar", descripcion:"SALA DE REUNIONES", capacidad:"A confirmar", observaciones:"Espacio para reuniones", horarios:"Sin horarios asignados" }
 };
 
 const teacherSchedule = {
@@ -629,7 +630,7 @@ function generateEventId() { return 'evt_' + Date.now() + '_' + Math.random().to
 // El listener onSnapshot mantiene todos los clientes sincronizados en tiempo real.
 
 // Una sola escucha para el mes visualizado, con margen para semanas entre meses.
-// Mantiene los 13 laboratorios visibles; solo limita documentos descargados.
+// Mantiene los 14 espacios visibles; solo limita documentos descargados.
 function rangoMes(fecha) {
     const inicio = new Date(fecha.getFullYear(), fecha.getMonth(), 1, 12);
     inicio.setDate(inicio.getDate() - 7);
