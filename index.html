@@ -654,12 +654,18 @@ function generateEventId() { return 'evt_' + Date.now() + '_' + Math.random().to
 // Cada reserva es un documento independiente → no hay riesgo de que un PC pise los datos de otro.
 // El listener onSnapshot mantiene todos los clientes sincronizados en tiempo real.
 
-// Una sola escucha para el mes visualizado, con margen para semanas entre meses.
-// Mantiene los 14 espacios visibles; solo limita documentos descargados.
-function rangoMes(fecha) {
-    const inicio = new Date(fecha.getFullYear(), fecha.getMonth(), 1, 12);
-    inicio.setDate(inicio.getDate() - 7);
-    const fin = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 1, 12);
+// Escucha limitada a los días visibles. Evita descargar todo el mes en vista diaria.
+function rangoVisible() {
+    const base = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 12);
+    if (currentView === 'diario') {
+        const fin = new Date(base);
+        fin.setDate(fin.getDate() + 1);
+        return [getLocalDateKey(base), getLocalDateKey(fin)];
+    }
+    // En vista semanal, incluir la semana completa (lunes a domingo).
+    const inicio = new Date(base);
+    inicio.setDate(inicio.getDate() - ((inicio.getDay() + 6) % 7));
+    const fin = new Date(inicio);
     fin.setDate(fin.getDate() + 7);
     return [getLocalDateKey(inicio), getLocalDateKey(fin)];
 }
@@ -683,7 +689,7 @@ function convertirReservas(snapshot) {
 }
 function subscribeToEvents() {
     if (!currentUser) return;
-    const [inicio, fin] = rangoMes(currentDate);
+    const [inicio, fin] = rangoVisible();
     const clave = inicio + '|' + fin;
     if (unsubscribeEvents && activeRangeKey === clave) return;
     if (unsubscribeEvents) { unsubscribeEvents(); unsubscribeEvents = null; }
@@ -1813,7 +1819,7 @@ auth.onAuthStateChanged(async user => {
         initializeDragAndDrop();
 
         // Migración de datos (solo una vez)
-        await migrarDatosAntiguos();
+        // Migración histórica desactivada en el inicio de sesión: no altera reservas existentes.
 
         // Suscripción en tiempo real
         subscribeToEvents();
