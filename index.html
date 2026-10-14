@@ -2372,22 +2372,22 @@ auth.onAuthStateChanged(async user => {
 #metricasModal{position:fixed;inset:0;background:#102a3dc9;z-index:29000;display:none;align-items:center;justify-content:center;padding:14px}
 #metricasModal.visible{display:flex}
 #metricasPanel{background:#fff;border-radius:16px;width:min(1200px,98vw);max-height:94vh;overflow:auto;padding:22px;color:#153244}
-.metricas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin:16px 0}
+.metricas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;margin:16px 0}
 .metricas-tarjeta{border:1px solid #dbe5eb;background:#f7fafc;border-radius:12px;padding:14px}
-.metricas-tarjeta b{display:block;font-size:1.55rem;margin-top:7px;color:#153244}
+.metricas-tarjeta b{display:block;font-size:1.45rem;margin-top:7px;color:#153244}
 .metricas-tarjeta small{color:#587080;font-size:.8rem}
-.metricas-fila{display:grid;grid-template-columns:minmax(100px,160px) 1fr 95px;align-items:center;gap:9px;margin:9px 0;font-size:.83rem}
-.metricas-barra{background:#e8eff3;height:19px;border-radius:6px;overflow:hidden}
+.metricas-fila{display:grid;grid-template-columns:minmax(115px,180px) 1fr 100px;align-items:center;gap:9px;margin:9px 0;font-size:.83rem}
+.metricas-barra{background:#e8eff3;height:20px;border-radius:6px;overflow:hidden}
 .metricas-barra>div{height:100%;background:#247d91;border-radius:6px}
 .metricas-tabla{width:100%;border-collapse:collapse;font-size:.83rem}
 .metricas-tabla th,.metricas-tabla td{padding:9px;border-bottom:1px solid #e5edf0;text-align:left}
 .metricas-tabla th{background:#153244;color:white}
 @media print{#metricasModal{position:static;background:white;display:block}#metricasPanel{max-height:none;width:100%;overflow:visible}#metricasModal .no-imprimir,body>*:not(#metricasModal){display:none!important}}
 </style>
-<div id="metricasModal" role="dialog" aria-modal="true" aria-label="Métricas históricas">
+<div id="metricasModal" role="dialog" aria-modal="true" aria-label="Métricas históricas de actividades">
  <div id="metricasPanel">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-   <div><h2>📊 Métricas de laboratorios</h2><p style="color:#607788;font-size:.85rem;margin-top:5px">Histórico desde el inicio de los registros disponibles en Firebase</p></div>
+   <div><h2>📊 Métricas de actividades y temáticas</h2><p style="color:#607788;font-size:.85rem;margin-top:5px">Histórico de reservas disponibles · Clasificación por título, independientemente del laboratorio</p></div>
    <button id="metricasCerrar" class="btn no-imprimir">✕ Cerrar</button>
   </div>
   <div class="no-imprimir" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:15px 0">
@@ -2396,18 +2396,23 @@ auth.onAuthStateChanged(async user => {
    <button class="btn" id="metricasAplicar">Aplicar filtros</button>
    <button class="btn" id="metricasHistorico">Todo el histórico</button>
    <button class="btn" id="metricasActualizar">↻ Actualizar</button>
-   <button class="btn" id="metricasCSV">⬇ Excel (CSV)</button>
+   <button class="btn" id="metricasExcel">⬇ Excel</button>
    <button class="btn" id="metricasImprimir">🖨 Imprimir / PDF</button>
   </div>
   <p id="metricasEstado" role="status" style="font-size:.84rem;color:#506c7d"></p>
   <div id="metricasResumen" class="metricas-grid"></div>
-  <h3 style="margin:20px 0 12px">Horas reservadas por laboratorio</h3>
+  <h3 style="margin:20px 0 12px">Cantidad de reservas por temática</h3>
   <div id="metricasGrafico"></div>
-  <h3 style="margin:22px 0 12px">Detalle de los 14 espacios</h3>
+  <h3 style="margin:22px 0 12px">Temáticas registradas</h3>
   <div id="metricasTarjetas" class="metricas-grid"></div>
-  <h3 style="margin:22px 0 12px">Ranking y detalle</h3>
-  <div style="overflow-x:auto"><table class="metricas-tabla"><thead><tr><th>Laboratorio</th><th>Reservas históricas</th><th>Horas históricas</th><th>Reservas vigentes</th><th>Horas vigentes</th><th>Promedio (h)</th></tr></thead><tbody id="metricasCuerpo"></tbody></table></div>
-  <p style="font-size:.77rem;color:#6a7b86;margin-top:14px">Histórico = reservas actuales más reservas eliminadas que tengan registro de eliminación en Movimientos. Los traslados no se cuentan como nuevas reservas. Las reservas eliminadas antes de existir el registro de Movimientos podrían no recuperarse. Las horas corresponden a duración programada, no a asistencia efectiva.</p>
+  <h3 style="margin:22px 0 12px">Ranking por temática</h3>
+  <div style="overflow-x:auto"><table class="metricas-tabla"><thead><tr><th>Temática</th><th>Reservas históricas</th><th>Horas históricas</th><th>Reservas vigentes</th><th>Horas vigentes</th><th>Promedio (h)</th></tr></thead><tbody id="metricasCuerpo"></tbody></table></div>
+  <h3 style="margin:22px 0 12px">Actividades más programadas (títulos agrupados)</h3>
+  <div style="overflow-x:auto"><table class="metricas-tabla"><thead><tr><th>Actividad</th><th>Temática</th><th>Reservas</th><th>Horas</th></tr></thead><tbody id="metricasTitulos"></tbody></table></div>
+  <h3 style="margin:22px 0 12px">Títulos sin clasificar</h3>
+  <p style="font-size:.82rem;color:#587080;margin-bottom:8px">Estos nombres no coincidieron con ninguna palabra clave. No se pierde ninguna reserva: figuran como «Otras actividades».</p>
+  <div style="overflow-x:auto"><table class="metricas-tabla"><thead><tr><th>Título original</th><th>Reservas</th><th>Horas</th></tr></thead><tbody id="metricasSinClasificar"></tbody></table></div>
+  <p style="font-size:.77rem;color:#6a7b86;margin-top:14px">Se contabiliza cada fecha reservada como un evento, incluso en series repetidas. Histórico = reservas vigentes más reservas eliminadas con registro en Movimientos. Los traslados no se duplican. Los títulos anteriores a una modificación se muestran según el último estado disponible. Los registros eliminados antes de existir el historial pueden no recuperarse. Las horas son programadas, no asistencia efectiva.</p>
  </div>
 </div>
 <script>
@@ -2417,42 +2422,94 @@ auth.onAuthStateChanged(async user => {
  const destino=document.getElementById('btnMovimientos');destino.parentNode.insertBefore(btn,destino);
  const modal=document.getElementById('metricasModal');
  const $=id=>document.getElementById(id);
- let registros=[],historicos=[],ultimaCarga=null,usuarioAutorizado=false;
+ let registros=[],historicos=[],ultimaCarga=null,usuarioAutorizado=false,exportarTemas=[],exportarTitulos=[],exportarSin=[];
  const fechaHoy=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'});
  const numero=n=>Number(n||0).toLocaleString('es-AR',{maximumFractionDigits:1});
- const minutos=d=>{if(!d?.inicio||!d?.fin)return 0;const a=Number(d.inicio.hour)*60+Number(d.inicio.minute||0),b=Number(d.fin.hour)*60+Number(d.fin.minute||0);return Number.isFinite(a)&&Number.isFinite(b)&&b>a?(b-a):0};
- const valido=d=>d&&d.fecha&&d.laboratorio&&labs.includes(d.laboratorio);
+ const minutos=d=>{if(!d?.inicio||!d?.fin)return 0;const a=Number(d.inicio.hour)*60+Number(d.inicio.minute||0),b=Number(d.fin.hour)*60+Number(d.fin.minute||0);return Number.isFinite(a)&&Number.isFinite(b)&&b>a?b-a:0};
+ const valido=d=>d&&typeof d.fecha==='string'&&typeof d.titulo==='string';
  const rango=d=>{const desde=$('metricasDesde').value,hasta=$('metricasHasta').value;return (!desde||d.fecha>=desde)&&(!hasta||d.fecha<=hasta)};
+ const normalizar=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+ function categoria(t){
+   const n=' '+normalizar(t)+' ';
+   const contiene=(...palabras)=>palabras.some(p=>n.includes(' '+p+' '));
+   // FIPE tiene prioridad sobre IA y cualquier otra temática si menciona emprendedores.
+   if(contiene('fipe')||n.includes('formacion integral para emprendedor')||n.includes('formacion integral en emprendedor')||n.includes('emprendedorismo')||n.includes('emprendimiento')||n.includes('emprendedor')||n.includes('emprendedora'))return 'FIPE';
+   if(contiene('ia')||n.includes('inteligencia artificial')||n.includes('chatgpt')||n.includes('chat gpt'))return 'IA';
+   if(n.includes('robotica')||n.includes('robot'))return 'Robótica';
+   if(n.includes('autoelevador'))return 'Transporte';
+   if(contiene('vcf')||n.includes('vinculacion'))return 'VCF';
+   if(n.includes('balanz')||n.includes('mercado de capitales')||n.includes('excel para finanzas')||n.includes('economia personal')||n.includes('finanza')||n.includes('financiera')||n.includes('financiero')||n.includes('inversion')||n.includes('byma')||n.includes('cedear')||n.includes('criptoactivo'))return 'Finanzas';
+   if(n.includes('logistica'))return 'Logística';
+   if(n.includes('transporte'))return 'Transporte';
+   if(n.includes('higiene')||n.includes('bromatologia')||n.includes('manipulacion de alimentos'))return 'Seguridad e higiene';
+   if(n.includes('fotografia')||n.includes('comunicacion')||n.includes('redes sociales')||n.includes('branding'))return 'Comunicación';
+   if(n.includes('sustentabilidad')||n.includes('sostenibilidad'))return 'Sustentabilidad';
+   return 'Otras actividades';
+ }
+ function actividad(t){
+   const n=normalizar(t),c=categoria(t);
+   if(c==='VCF')return 'VCF';
+   if(c==='FIPE'){
+     if(/\bnivel\s*(2|ii|dos)\b/.test(n))return 'FIPE Nivel II';
+     if(/\bnivel\s*(1|i|uno)\b/.test(n))return 'FIPE Nivel I';
+     return 'FIPE';
+   }
+   if(c==='Finanzas'){
+     if(n.includes('balanz'))return 'Ciclo Balanz';
+     if(n.includes('excel para finanzas'))return 'Excel para Finanzas';
+     if(n.includes('economia personal'))return 'Estrategias para Economía Personal';
+     if(n.includes('mercado de capitales')||n.includes('fundamentos financieros'))return 'Mercado de Capitales';
+   }
+   if(c==='Transporte'&&n.includes('autoelevador'))return 'Autoelevadores';
+   if(c==='Robótica')return 'Robótica';
+   if(c==='IA'&&(n.includes('inteligencia artificial')||contieneIA(n)))return 'Inteligencia Artificial';
+   return String(t||'Sin título').trim().replace(/\s+/g,' ');
+ }
+ const contieneIA=n=>(' '+n+' ').includes(' ia ');
  async function cargar(){
    if(!usuarioAutorizado||!currentUser||!isAdmin)throw new Error('Acceso reservado a administradores.');
    $('metricasEstado').textContent='Consultando el histórico de reservas y movimientos...';
    const [rs,ms]=await Promise.all([db.collection('reservas').get(),db.collection('movimientos').where('accion','==','eliminar').get()]);
    registros=rs.docs.map(x=>({id:x.id,...x.data()})).filter(valido);
-   const vigentes=new Set(registros.map(x=>x.id));
-   const borradas=new Map();
+   const vigentes=new Set(registros.map(x=>x.id)),borradas=new Map();
    ms.forEach(x=>{const m=x.data(),id=m.reservaId;if(!id||vigentes.has(id)||!valido(m.antes))return;
-     const anterior=borradas.get(id);const tiempo=m.timestamp?.toMillis?.()||0;
+     const anterior=borradas.get(id),tiempo=m.timestamp?.toMillis?.()||0;
      if(!anterior||tiempo>(anterior.tiempo||0))borradas.set(id,{...m.antes,id,tiempo});
    });
    historicos=[...registros,...borradas.values()];ultimaCarga=new Date();pintar();
  }
+ const fila=(contenedor,valores)=>{const tr=document.createElement('tr');valores.forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td)});contenedor.append(tr)};
  function pintar(){
-   const vig=registros.filter(rango),hist=historicos.filter(rango);
-   const resumen=labs.map(lab=>{const h=hist.filter(x=>x.laboratorio===lab),v=vig.filter(x=>x.laboratorio===lab);return {lab,cuenta:h.length,horas:h.reduce((a,x)=>a+minutos(x),0)/60,vigentes:v.length,horasVigentes:v.reduce((a,x)=>a+minutos(x),0)/60}});
-   const total=hist.length,horas=resumen.reduce((a,x)=>a+x.horas,0),max=resumen.reduce((a,b)=>a.horas>b.horas?a:b);
-   const datos=[['Reservas históricas',numero(total)],['Horas históricas',numero(horas)+' h'],['Reservas vigentes',numero(vig.length)],['Laboratorio más reservado',max.horas?nombreLabVisible(max.lab):'—']];
+   const vig=registros.filter(rango),hist=historicos.filter(rango),grupos=new Map(),titulos=new Map(),sin=new Map();
+   for(const r of hist){
+     const c=categoria(r.titulo),a=actividad(r.titulo),h=minutos(r)/60;
+     if(!grupos.has(c))grupos.set(c,{tema:c,cuenta:0,horas:0,vigentes:0,horasVigentes:0});
+     const g=grupos.get(c);g.cuenta++;g.horas+=h;
+     const key=c+'|'+normalizar(a);
+     if(!titulos.has(key))titulos.set(key,{actividad:a,tema:c,cuenta:0,horas:0});
+     titulos.get(key).cuenta++;titulos.get(key).horas+=h;
+     if(c==='Otras actividades'){
+       const k=normalizar(r.titulo)||'(sin titulo)';if(!sin.has(k))sin.set(k,{titulo:r.titulo||'Sin título',cuenta:0,horas:0});sin.get(k).cuenta++;sin.get(k).horas+=h;
+     }
+   }
+   for(const r of vig){const g=grupos.get(categoria(r.titulo));if(g){g.vigentes++;g.horasVigentes+=minutos(r)/60}}
+   exportarTemas=[...grupos.values()].sort((a,b)=>b.cuenta-a.cuenta||a.tema.localeCompare(b.tema,'es'));
+   exportarTitulos=[...titulos.values()].sort((a,b)=>b.cuenta-a.cuenta||a.actividad.localeCompare(b.actividad,'es'));
+   exportarSin=[...sin.values()].sort((a,b)=>b.cuenta-a.cuenta);
+   const totalHoras=hist.reduce((acc,r)=>acc+minutos(r)/60,0),top=exportarTemas[0];
+   const datos=[['Reservas históricas',numero(hist.length)],['Horas programadas',numero(totalHoras)+' h'],['Temática principal',top?top.tema:'—'],['Actividades agrupadas',numero(exportarTitulos.length)],['Títulos sin clasificar',numero(exportarSin.length)]];
    $('metricasResumen').replaceChildren();datos.forEach(([titulo,valor])=>{const e=document.createElement('div');e.className='metricas-tarjeta';const s=document.createElement('small');s.textContent=titulo;const b=document.createElement('b');b.textContent=valor;e.append(s,b);$('metricasResumen').append(e)});
-   $('metricasTarjetas').replaceChildren();$('metricasGrafico').replaceChildren();$('metricasCuerpo').replaceChildren();
-   const mayor=Math.max(1,...resumen.map(x=>x.horas));
-   resumen.sort((a,b)=>b.horas-a.horas||a.lab.localeCompare(b.lab,'es'));
-   resumen.forEach(x=>{
-     const tarjeta=document.createElement('div');tarjeta.className='metricas-tarjeta';
-     const t=document.createElement('small');t.textContent=nombreLabVisible(x.lab);const b=document.createElement('b');b.textContent=numero(x.cuenta)+' reservas';const p=document.createElement('div');p.textContent=numero(x.horas)+' horas';p.style.marginTop='5px';tarjeta.append(t,b,p);$('metricasTarjetas').append(tarjeta);
-     const fila=document.createElement('div');fila.className='metricas-fila';const nombre=document.createElement('span');nombre.textContent=nombreLabVisible(x.lab);const barra=document.createElement('div');barra.className='metricas-barra';const relleno=document.createElement('div');relleno.style.width=(x.horas/mayor*100)+'%';barra.append(relleno);const cantidad=document.createElement('strong');cantidad.textContent=numero(x.horas)+' h';fila.append(nombre,barra,cantidad);$('metricasGrafico').append(fila);
-     const tr=document.createElement('tr');[nombreLabVisible(x.lab),numero(x.cuenta),numero(x.horas),numero(x.vigentes),numero(x.horasVigentes),x.cuenta?numero(x.horas/x.cuenta):'—'].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td)});$('metricasCuerpo').append(tr);
-   });
-   $('metricasEstado').textContent='Actualizado: '+(ultimaCarga?.toLocaleString('es-AR')||'—')+' · '+hist.length+' reservas en el período seleccionado. Las métricas se recalculan al abrir el panel o al pulsar Actualizar.';
-   window.__metricasExportar=resumen;
+   ['metricasTarjetas','metricasGrafico','metricasCuerpo','metricasTitulos','metricasSinClasificar'].forEach(id=>$(id).replaceChildren());
+   const mayor=Math.max(1,...exportarTemas.map(x=>x.cuenta));
+   for(const x of exportarTemas){
+     const tarjeta=document.createElement('div');tarjeta.className='metricas-tarjeta';const t=document.createElement('small');t.textContent=x.tema;const b=document.createElement('b');b.textContent=numero(x.cuenta)+' reservas';const p=document.createElement('div');p.textContent=numero(x.horas)+' horas';p.style.marginTop='5px';tarjeta.append(t,b,p);$('metricasTarjetas').append(tarjeta);
+     const barraFila=document.createElement('div');barraFila.className='metricas-fila';const nombre=document.createElement('span');nombre.textContent=x.tema;const barra=document.createElement('div');barra.className='metricas-barra';const relleno=document.createElement('div');relleno.style.width=x.cuenta/mayor*100+'%';barra.append(relleno);const cantidad=document.createElement('strong');cantidad.textContent=numero(x.cuenta);barraFila.append(nombre,barra,cantidad);$('metricasGrafico').append(barraFila);
+     fila($('metricasCuerpo'),[x.tema,numero(x.cuenta),numero(x.horas),numero(x.vigentes),numero(x.horasVigentes),x.cuenta?numero(x.horas/x.cuenta):'—']);
+   }
+   exportarTitulos.forEach(x=>fila($('metricasTitulos'),[x.actividad,x.tema,numero(x.cuenta),numero(x.horas)]));
+   exportarSin.forEach(x=>fila($('metricasSinClasificar'),[x.titulo,numero(x.cuenta),numero(x.horas)]));
+   if(!exportarSin.length)fila($('metricasSinClasificar'),['Todos los títulos están clasificados','—','—']);
+   $('metricasEstado').textContent='Actualizado: '+(ultimaCarga?.toLocaleString('es-AR')||'—')+' · '+hist.length+' reservas en el período. Actualización al abrir el panel o pulsar Actualizar.';
  }
  btn.onclick=async()=>{if(!isAdmin||!usuarioAutorizado)return;modal.classList.add('visible');try{await cargar()}catch(e){$('metricasEstado').textContent='No se pudieron cargar las métricas: '+e.message}};
  $('metricasCerrar').onclick=()=>modal.classList.remove('visible');
@@ -2461,10 +2518,12 @@ auth.onAuthStateChanged(async user => {
  $('metricasHistorico').onclick=()=>{$('metricasDesde').value='';$('metricasHasta').value='';pintar()};
  $('metricasActualizar').onclick=async()=>{try{await cargar()}catch(e){$('metricasEstado').textContent=e.message}};
  $('metricasImprimir').onclick=()=>window.print();
- $('metricasCSV').onclick=()=>{
-   const filas=[['Laboratorio','Reservas históricas','Horas históricas','Reservas vigentes','Horas vigentes','Promedio horas'],...(window.__metricasExportar||[]).map(x=>[nombreLabVisible(x.lab),x.cuenta,x.horas.toFixed(2),x.vigentes,x.horasVigentes.toFixed(2),x.cuenta?(x.horas/x.cuenta).toFixed(2):'0'])];
-   const csv='\ufeff'+filas.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n');
-   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));const a=document.createElement('a');a.href=url;a.download='metricas_laboratorios_'+fechaHoy()+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ $('metricasExcel').onclick=()=>{
+   if(typeof XLSX==='undefined'){alert('No se pudo cargar la biblioteca de Excel.');return}
+   const libro=XLSX.utils.book_new();
+   const hojas=[['Temáticas',[['Temática','Reservas históricas','Horas históricas','Reservas vigentes','Horas vigentes','Promedio horas'],...exportarTemas.map(x=>[x.tema,x.cuenta,Number(x.horas.toFixed(2)),x.vigentes,Number(x.horasVigentes.toFixed(2)),x.cuenta?Number((x.horas/x.cuenta).toFixed(2)):0])]],['Actividades',[['Actividad','Temática','Reservas','Horas'],...exportarTitulos.map(x=>[x.actividad,x.tema,x.cuenta,Number(x.horas.toFixed(2))])]],['Sin clasificar',[['Título original','Reservas','Horas'],...exportarSin.map(x=>[x.titulo,x.cuenta,Number(x.horas.toFixed(2))])]]];
+   hojas.forEach(([nombre,datos])=>XLSX.utils.book_append_sheet(libro,XLSX.utils.aoa_to_sheet(datos),nombre));
+   XLSX.writeFile(libro,'metricas_actividades_'+fechaHoy()+'.xlsx');
  };
  auth.onAuthStateChanged(async user=>{
    usuarioAutorizado=false;btn.style.display='none';modal.classList.remove('visible');
