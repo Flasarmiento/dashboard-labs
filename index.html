@@ -558,6 +558,25 @@ body{font-family:Archivo,'Segoe UI',Arial,sans-serif;background:var(--ba-bg);col
  #toolbar .btn{font-size:.68rem;padding:7px 6px}
  .inst-agency{flex-basis:78px;width:78px!important}.inst-agency img{width:72px!important}
 }
+/* CORRECCIÓN: horas visibles en columna fija, tanto PC como celular. */
+#calendarTable tbody th.time-slot,
+#calendarTable tbody th.time-slot:first-child {
+  color: #173449 !important;
+  background: #edf3f6 !important;
+  font-weight: 800 !important;
+  font-size: 0.84rem !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+  font-variant-numeric: tabular-nums;
+}
+#calendarTable thead th:first-child {
+  color: #ffffff !important;
+  background: #1d3343 !important;
+}
+@media(max-width:768px) {
+  #calendarTable tbody th.time-slot,
+  #calendarTable tbody th.time-slot:first-child { font-size: 0.79rem !important; }
+}
 </style>
 </head>
 <body>
