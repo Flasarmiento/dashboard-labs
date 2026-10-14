@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/locales/es.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.11/dist/interact.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -359,6 +360,7 @@ body .event-block:active { cursor: grabbing; }
     border-radius: 4px !important; padding: 2px 4px !important;
 }
 
+.event-docente {font-size:.64rem;font-weight:600;line-height:1.25;margin-top:4px;padding-top:3px;border-top:1px solid rgba(255,255,255,.55);}
 /* === MODAL HORARIOS === */
 #horariosModal { z-index: 10001; }
 #horariosModalContent {
@@ -484,6 +486,7 @@ body .event-block:active { cursor: grabbing; }
       
       <button class="btn" id="btnLimpiar" style="display: none;">🧹 Limpiar día</button>
       <button class="btn" id="btnAdminUsers" style="display:none;">👥 Usuarios</button>
+        <button class="btn" id="btnExportar" style="display:none;background:#256b64;">📄 Exportar Excel / PDF</button>
         <button class="btn" id="btnMovimientos" style="display:none;background:#2c3e50;">📜 Movimientos</button>
       <button class="btn" id="btnLogout">🚪 Salir</button>
     </div>
@@ -517,12 +520,25 @@ body .event-block:active { cursor: grabbing; }
   <div id="modalContent" class="modal-box">
     <div class="modal-header">
       <h3 id="modalTitle">Calendario Mensual</h3>
+      <button class="btn" id="btnExportarMes" style="display:none;margin-left:auto;margin-right:12px;background:#256b64;">📄 Exportar Excel / PDF</button>
       <button class="modal-close-btn" id="closeModal">✕</button>
     </div>
     <div id="monthCalendar" style="flex:1;min-height:0;"></div>
   </div>
 </div>
 
+<!-- EXPORTACIÓN (ADMINISTRADORES) -->
+<div id="exportModal" class="modal-overlay" style="z-index:27000">
+ <div class="modal-box" style="width:95%;max-width:520px;gap:14px;max-height:90vh;overflow:auto">
+  <div class="modal-header"><h3>📄 Exportar calendario</h3><button class="modal-close-btn" id="exportCerrar">✕</button></div>
+  <label>Vista <select id="exportVista" style="display:block;width:100%;padding:9px"><option value="mensual">Mensual</option><option value="semanal">Semanal</option><option value="diaria">Diaria</option></select></label>
+  <label>Fecha de referencia <input type="date" id="exportFecha" style="display:block;width:100%;padding:9px"></label>
+  <label>Laboratorio <select id="exportLab" style="display:block;width:100%;padding:9px"><option value="">Todos los laboratorios</option></select></label>
+  <p style="font-size:.83rem;color:#526676">Se exportan las reservas del período elegido, con docente, actividad, horario y laboratorio. El PDF se abre en una vista lista para imprimir o guardar como PDF.</p>
+  <div id="exportEstado" role="status" style="font-size:.85rem"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn" id="exportExcel" style="background:#21855c">📊 Descargar Excel</button><button class="btn" id="exportPDF" style="background:#153244">🖨️ Imprimir / PDF</button></div>
+ </div>
+</div>
 <!-- ===================== MODAL MOVIMIENTOS ===================== -->
 <div id="movimientosModal" class="modal-overlay">
   <div class="modal-box" style="width:95%;max-width:1150px;max-height:85vh;overflow-y:auto;">
@@ -643,6 +659,7 @@ const db    = firebase.firestore();
 // ======================== CONSTANTES ========================
 const labs   = ["SUM","HYS","SALA DE REUNIONES","TEXTIL","RA","ROBÓTICA","IA","FINANZAS","TRANSPORTE","LOGÍSTICA","HYS 2","STREAMING","ENERGÍA","SUSTENTABILIDAD"];
 const colors = ["#FF6B6B","#4ECDC4","#607D8B","#45B7D1","#96CEB4","#FFEEAD","#D4A5A5","#9B59B6","#3498DB","#E67E22","#2ECC71","#E74C3C","#1ABC9C","#F1C40F"];
+const nombreLabVisible = lab => lab === "SALA DE REUNIONES" ? "SALA REUNIONES" : lab;
 const hours  = Array.from({length:14}, (_,i) => 8 + i); // 8:00 a 21:00
 
 const labInfo = {
@@ -741,7 +758,8 @@ function convertirReservas(snapshot) {
             startHour: data.inicio?.hour || 0, startMinute: data.inicio?.minute || 0,
             endHour: data.fin?.hour || 0, endMinute: data.fin?.minute || 0,
             color: data.color || colors[labs.indexOf(lab)] || '#153244',
-            creadoPor: data.creadoPor, serieId: data.serieId || null
+            creadoPor: data.creadoPor, serieId: data.serieId || null,
+             docenteUid: data.docenteUid || "", docenteNombre: data.docenteNombre || "", docenteEmail: data.docenteEmail || ""
         };
     });
     return resultado;
@@ -1552,7 +1570,7 @@ function buildTable() {
     thead.innerHTML = '<th>Hora</th>';
     labs.forEach(lab => {
         const th = document.createElement("th");
-        th.textContent = (lab === "HYS") ? "RECORRIDAS" : lab;
+        th.textContent = (lab === "HYS") ? "RECORRIDAS" : nombreLabVisible(lab);
         if (th.textContent.length > 10) {
             th.style.fontSize = "0.58rem";
         }
@@ -1654,6 +1672,7 @@ function renderDayView() {
                 const titleDiv = document.createElement("div");
                 titleDiv.className   = "event-title";
                 titleDiv.textContent = event.title;
+                if (event.docenteNombre) { const docente = document.createElement("div"); docente.className="event-docente"; docente.textContent="Docente: " + event.docenteNombre; titleDiv.appendChild(docente); }
 
                 const timeDiv = document.createElement("div");
                 timeDiv.className   = "event-time";
@@ -1785,7 +1804,7 @@ function renderWeekView() {
                 const ev = events[date][lab][id];
                 fcEvents.push({
                     id:    ev.id,
-                    title: `[${lab}] ${ev.title}`,
+                    title: `[${nombreLabVisible(lab)}] ${ev.title}${ev.docenteNombre ? " · Docente: " + ev.docenteNombre : ""}`,
                     start: `${date}T${String(ev.startHour).padStart(2,'0')}:${String(ev.startMinute||0).padStart(2,'0')}:00`,
                     end:   `${date}T${String(ev.endHour).padStart(2,'0')}:${String(ev.endMinute||0).padStart(2,'0')}:00`,
                     color: ev.color,
@@ -1797,6 +1816,7 @@ function renderWeekView() {
 
     weekCalendar = new FullCalendar.Calendar(document.getElementById("weekCalendar"), {
         locale: 'es',
+        buttonText: { today: "Hoy", month: "Mes", week: "Semana", day: "Día" },
         initialView: 'timeGridWeek',
         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek' },
         events: fcEvents,
@@ -1857,7 +1877,9 @@ function renderWeekView() {
 // ======================== MODAL MENSUAL POR LABORATORIO ========================
 function openModalLab(lab) {
     const modal = document.getElementById("modal");
-    document.getElementById("modalTitle").textContent = `📅 Calendario Mensual — ${lab}`;
+    document.getElementById("modalTitle").textContent = `📅 Calendario Mensual — ${nombreLabVisible(lab)}`;
+    window._exportLabActual = lab;
+    document.getElementById("btnExportarMes").style.display = isAdmin ? "inline-block" : "none";
     document.getElementById("monthCalendar").innerHTML = "";
 
     cerrarEscuchaMes();
@@ -1869,6 +1891,7 @@ function openModalLab(lab) {
 
     monthCalendar = new FullCalendar.Calendar(calEl, {
         locale: 'es',
+        buttonText: { today: "Hoy", month: "Mes", week: "Semana", day: "Día" },
         initialView: 'dayGridMonth',
         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
         height: '100%',
@@ -1881,7 +1904,7 @@ function openModalLab(lab) {
                     const ev = monthEvents[date][lab][evId];
                     fcEvents.push({
                         id:    ev.id,
-                        title: ev.title,
+                        title: ev.title + (ev.docenteNombre ? " · Docente: " + ev.docenteNombre : ""),
                         start: `${date}T${String(ev.startHour).padStart(2,'0')}:${String(ev.startMinute||0).padStart(2,'0')}:00`,
                         end:   `${date}T${String(ev.endHour).padStart(2,'0')}:${String(ev.endMinute||0).padStart(2,'0')}:00`,
                         color: ev.color || colors[labs.indexOf(lab)],
@@ -2118,7 +2141,7 @@ function buildSidebar() {
         div.className = "lab";
         div.style.backgroundColor = colors[i];
         div.style.color = "#FFFFFF";
-        div.textContent = (lab === "HYS") ? "RECORRIDAS" : lab;
+        div.textContent = (lab === "HYS") ? "RECORRIDAS" : nombreLabVisible(lab);
         div.addEventListener("mouseenter", e => showLabTooltip(lab, e));
         div.addEventListener("mouseleave", hideLabTooltip);
         div.addEventListener("mousemove",  e => showLabTooltip(lab, e));
@@ -2188,6 +2211,87 @@ document.getElementById('closeHorariosModal').onclick = () => document.getElemen
     });
 });
 
+
+// ======================== EXPORTACIÓN ADMINISTRADORES ========================
+function exportEscapar(valor) {
+    return String(valor ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function abrirExportacion(lab = '') {
+    if (!isAdmin) return;
+    const selector = document.getElementById('exportLab');
+    selector.replaceChildren();
+    const todas = document.createElement('option'); todas.value=''; todas.textContent='Todos los laboratorios'; selector.appendChild(todas);
+    labs.forEach(l => {const o=document.createElement('option');o.value=l;o.textContent=nombreLabVisible(l);selector.appendChild(o)});
+    selector.value = lab;
+    document.getElementById('exportVista').value = lab ? 'mensual' : (currentView === 'diario' ? 'diaria' : 'semanal');
+    document.getElementById('exportFecha').value = getLocalDateKey(currentDate);
+    document.getElementById('exportEstado').textContent='';
+    document.getElementById('exportModal').classList.add('visible');
+}
+document.getElementById('btnExportar').onclick = () => abrirExportacion();
+document.getElementById('btnExportarMes').onclick = () => {
+    const fecha = monthCalendar ? getLocalDateKey(monthCalendar.getDate()) : getLocalDateKey(currentDate);
+    abrirExportacion(window._exportLabActual || '');
+    document.getElementById('exportFecha').value=fecha;
+};
+document.getElementById('exportCerrar').onclick = () => document.getElementById('exportModal').classList.remove('visible');
+function periodoExportacion() {
+    const fechaTexto = document.getElementById('exportFecha').value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaTexto)) throw new Error('Elegí una fecha válida.');
+    const fecha = new Date(fechaTexto + 'T12:00:00');
+    if (isNaN(fecha.getTime())) throw new Error('Fecha inválida.');
+    const vista = document.getElementById('exportVista').value;
+    let desde, hasta;
+    if(vista==='mensual') { desde = new Date(fecha.getFullYear(),fecha.getMonth(),1,12); hasta=new Date(fecha.getFullYear(),fecha.getMonth()+1,1,12); }
+    else if(vista==='semanal') { desde = new Date(fecha); desde.setDate(desde.getDate()-((desde.getDay()+6)%7)); hasta=new Date(desde);hasta.setDate(hasta.getDate()+7); }
+    else { desde = new Date(fecha); hasta = new Date(fecha);hasta.setDate(hasta.getDate()+1); }
+    return {desde:getLocalDateKey(desde), hasta:getLocalDateKey(hasta), vista, lab:document.getElementById('exportLab').value};
+}
+async function obtenerDatosExportacion() {
+    if(!isAdmin || !currentUser) throw new Error('Solo los administradores pueden exportar.');
+    const periodo=periodoExportacion();
+    const snap=await db.collection('reservas').where('fecha','>=',periodo.desde).where('fecha','<',periodo.hasta).get();
+    const filas=[];
+    snap.forEach(doc=>{
+        const r=doc.data();
+        if(periodo.lab && r.laboratorio!==periodo.lab) return;
+        const hora=x=> x ? `${String(x.hour ?? 0).padStart(2,'0')}:${String(x.minute ?? 0).padStart(2,'0')}` : '';
+        filas.push({Fecha:r.fecha||'',Laboratorio:nombreLabVisible(r.laboratorio||''),Actividad:r.titulo||'',Inicio:hora(r.inicio),Fin:hora(r.fin),Docente:r.docenteNombre||'Sin asignar'});
+    });
+    filas.sort((a,b)=>a.Fecha.localeCompare(b.Fecha)||a.Inicio.localeCompare(b.Inicio)||a.Laboratorio.localeCompare(b.Laboratorio));
+    return {filas,periodo};
+}
+async function ejecutarExportacion(formato) {
+    const estado=document.getElementById('exportEstado');
+    const excel=document.getElementById('exportExcel'), pdf=document.getElementById('exportPDF');
+    let ventana=null;
+    // Abrir la ventana durante el clic para que el navegador no bloquee la impresión.
+    if(formato==='pdf') { ventana=window.open('','_blank'); if(!ventana){estado.textContent='Permití las ventanas emergentes para imprimir.';return;} }
+    excel.disabled=pdf.disabled=true;estado.textContent='Preparando exportación...';
+    try {
+        const {filas,periodo}=await obtenerDatosExportacion();
+        const etiqueta={mensual:'Mensual',semanal:'Semanal',diaria:'Diaria'}[periodo.vista];
+        const nombre=`Reservas_${periodo.vista}_${periodo.desde}`;
+        if(formato==='excel') {
+            if(typeof XLSX==='undefined') throw new Error('No se pudo cargar la biblioteca de Excel. Revisá la conexión a Internet.');
+            const hoja=XLSX.utils.json_to_sheet(filas.length ? filas : [{Fecha:'',Laboratorio:'',Actividad:'',Inicio:'',Fin:'',Docente:''}]);
+            hoja['!cols']=[{wch:14},{wch:23},{wch:55},{wch:10},{wch:10},{wch:32}];
+            const libro=XLSX.utils.book_new();XLSX.utils.book_append_sheet(libro,hoja,'Reservas');
+            XLSX.writeFile(libro,nombre+'.xlsx');
+        } else {
+            const cuerpo=filas.map(r=>`<tr>${[r.Fecha,r.Laboratorio,r.Actividad,r.Inicio,r.Fin,r.Docente].map(v=>`<td>${exportEscapar(v)}</td>`).join('')}</tr>`).join('');
+            const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${exportEscapar(nombre)}</title><style>
+            @page{size:A4 landscape;margin:12mm}body{font:12px Arial,sans-serif;color:#153244;margin:24px}h1{font-size:20px;margin-bottom:4px}p{margin:4px 0 18px;color:#555}table{width:100%;border-collapse:collapse;table-layout:auto}th{background:#153244;color:white;text-align:left}th,td{border:1px solid #cbd5df;padding:7px;vertical-align:top;overflow-wrap:anywhere}tr:nth-child(even){background:#f1f5f8}tr{break-inside:avoid}.acciones{margin-bottom:18px}button{padding:10px 18px;background:#153244;color:white;border:0;border-radius:6px;cursor:pointer}@media print{.acciones{display:none}body{margin:0}thead{display:table-header-group}}
+            </style></head><body><div class="acciones"><button onclick="window.print()">Imprimir / Guardar como PDF</button></div><h1>Centro de Simulación — Reservas (${etiqueta})</h1><p>Período: ${exportEscapar(periodo.desde)} al ${exportEscapar(periodo.hasta)} · ${exportEscapar(periodo.lab ? nombreLabVisible(periodo.lab) : 'Todos los laboratorios')}</p><table><thead><tr><th>Fecha</th><th>Laboratorio</th><th>Actividad</th><th>Desde</th><th>Hasta</th><th>Docente</th></tr></thead><tbody>${cuerpo||'<tr><td colspan="6">Sin reservas para el período seleccionado</td></tr>'}</tbody></table></body></html>`;
+            ventana.document.open();ventana.document.write(html);ventana.document.close();
+        }
+        estado.textContent=`Listo: ${filas.length} reservas incluidas.`;
+    } catch(e) { if(ventana) ventana.close(); console.error(e);estado.textContent='Error: '+e.message; }
+    finally {excel.disabled=pdf.disabled=false;}
+}
+document.getElementById('exportExcel').onclick=()=>ejecutarExportacion('excel');
+document.getElementById('exportPDF').onclick=()=>ejecutarExportacion('pdf');
+
 // ======================== INICIALIZACIÓN (Auth State) ========================
 auth.onAuthStateChanged(async user => {
     if (user) {
@@ -2223,6 +2327,7 @@ auth.onAuthStateChanged(async user => {
         document.getElementById('userEmailDisplay').textContent = user.email;
         document.getElementById('userRoleDisplay').textContent  = isAdmin ? '⭐ Administrador' : '👤 Usuario';
         document.getElementById('btnAdminUsers').style.display  = isAdmin ? 'inline-block' : 'none';
+        document.getElementById('btnExportar').style.display = isAdmin ? 'inline-block' : 'none';
         document.getElementById('btnMovimientos').style.display = isAdmin ? 'inline-block' : 'none';
         document.getElementById('btnRecurrente').style.display = isAdmin ? 'inline-block' : 'none';
         document.getElementById('btnHorarios').style.display = isAdmin ? 'inline-block' : 'none';
