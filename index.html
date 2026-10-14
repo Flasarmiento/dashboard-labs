@@ -2366,5 +2366,112 @@ auth.onAuthStateChanged(async user => {
     }
 });
 </script>
+
+<!-- PANEL DE MÉTRICAS HISTÓRICAS: lectura, sin alterar reservas -->
+<style>
+#metricasModal{position:fixed;inset:0;background:#102a3dc9;z-index:29000;display:none;align-items:center;justify-content:center;padding:14px}
+#metricasModal.visible{display:flex}
+#metricasPanel{background:#fff;border-radius:16px;width:min(1200px,98vw);max-height:94vh;overflow:auto;padding:22px;color:#153244}
+.metricas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin:16px 0}
+.metricas-tarjeta{border:1px solid #dbe5eb;background:#f7fafc;border-radius:12px;padding:14px}
+.metricas-tarjeta b{display:block;font-size:1.55rem;margin-top:7px;color:#153244}
+.metricas-tarjeta small{color:#587080;font-size:.8rem}
+.metricas-fila{display:grid;grid-template-columns:minmax(100px,160px) 1fr 95px;align-items:center;gap:9px;margin:9px 0;font-size:.83rem}
+.metricas-barra{background:#e8eff3;height:19px;border-radius:6px;overflow:hidden}
+.metricas-barra>div{height:100%;background:#247d91;border-radius:6px}
+.metricas-tabla{width:100%;border-collapse:collapse;font-size:.83rem}
+.metricas-tabla th,.metricas-tabla td{padding:9px;border-bottom:1px solid #e5edf0;text-align:left}
+.metricas-tabla th{background:#153244;color:white}
+@media print{#metricasModal{position:static;background:white;display:block}#metricasPanel{max-height:none;width:100%;overflow:visible}#metricasModal .no-imprimir,body>*:not(#metricasModal){display:none!important}}
+</style>
+<div id="metricasModal" role="dialog" aria-modal="true" aria-label="Métricas históricas">
+ <div id="metricasPanel">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+   <div><h2>📊 Métricas de laboratorios</h2><p style="color:#607788;font-size:.85rem;margin-top:5px">Histórico desde el inicio de los registros disponibles en Firebase</p></div>
+   <button id="metricasCerrar" class="btn no-imprimir">✕ Cerrar</button>
+  </div>
+  <div class="no-imprimir" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:15px 0">
+   <label>Desde <input type="date" id="metricasDesde" style="padding:7px"></label>
+   <label>Hasta <input type="date" id="metricasHasta" style="padding:7px"></label>
+   <button class="btn" id="metricasAplicar">Aplicar filtros</button>
+   <button class="btn" id="metricasHistorico">Todo el histórico</button>
+   <button class="btn" id="metricasActualizar">↻ Actualizar</button>
+   <button class="btn" id="metricasCSV">⬇ Excel (CSV)</button>
+   <button class="btn" id="metricasImprimir">🖨 Imprimir / PDF</button>
+  </div>
+  <p id="metricasEstado" role="status" style="font-size:.84rem;color:#506c7d"></p>
+  <div id="metricasResumen" class="metricas-grid"></div>
+  <h3 style="margin:20px 0 12px">Horas reservadas por laboratorio</h3>
+  <div id="metricasGrafico"></div>
+  <h3 style="margin:22px 0 12px">Detalle de los 14 espacios</h3>
+  <div id="metricasTarjetas" class="metricas-grid"></div>
+  <h3 style="margin:22px 0 12px">Ranking y detalle</h3>
+  <div style="overflow-x:auto"><table class="metricas-tabla"><thead><tr><th>Laboratorio</th><th>Reservas históricas</th><th>Horas históricas</th><th>Reservas vigentes</th><th>Horas vigentes</th><th>Promedio (h)</th></tr></thead><tbody id="metricasCuerpo"></tbody></table></div>
+  <p style="font-size:.77rem;color:#6a7b86;margin-top:14px">Histórico = reservas actuales más reservas eliminadas que tengan registro de eliminación en Movimientos. Los traslados no se cuentan como nuevas reservas. Las reservas eliminadas antes de existir el registro de Movimientos podrían no recuperarse. Las horas corresponden a duración programada, no a asistencia efectiva.</p>
+ </div>
+</div>
+<script>
+(function(){
+ 'use strict';
+ const btn=document.createElement('button');btn.id='btnMetricas';btn.className='btn';btn.textContent='📊 Métricas';btn.style.cssText='display:none;background:#28798a';
+ const destino=document.getElementById('btnMovimientos');destino.parentNode.insertBefore(btn,destino);
+ const modal=document.getElementById('metricasModal');
+ const $=id=>document.getElementById(id);
+ let registros=[],historicos=[],ultimaCarga=null,usuarioAutorizado=false;
+ const fechaHoy=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Argentina/Buenos_Aires'});
+ const numero=n=>Number(n||0).toLocaleString('es-AR',{maximumFractionDigits:1});
+ const minutos=d=>{if(!d?.inicio||!d?.fin)return 0;const a=Number(d.inicio.hour)*60+Number(d.inicio.minute||0),b=Number(d.fin.hour)*60+Number(d.fin.minute||0);return Number.isFinite(a)&&Number.isFinite(b)&&b>a?(b-a):0};
+ const valido=d=>d&&d.fecha&&d.laboratorio&&labs.includes(d.laboratorio);
+ const rango=d=>{const desde=$('metricasDesde').value,hasta=$('metricasHasta').value;return (!desde||d.fecha>=desde)&&(!hasta||d.fecha<=hasta)};
+ async function cargar(){
+   if(!usuarioAutorizado||!currentUser||!isAdmin)throw new Error('Acceso reservado a administradores.');
+   $('metricasEstado').textContent='Consultando el histórico de reservas y movimientos...';
+   const [rs,ms]=await Promise.all([db.collection('reservas').get(),db.collection('movimientos').where('accion','==','eliminar').get()]);
+   registros=rs.docs.map(x=>({id:x.id,...x.data()})).filter(valido);
+   const vigentes=new Set(registros.map(x=>x.id));
+   const borradas=new Map();
+   ms.forEach(x=>{const m=x.data(),id=m.reservaId;if(!id||vigentes.has(id)||!valido(m.antes))return;
+     const anterior=borradas.get(id);const tiempo=m.timestamp?.toMillis?.()||0;
+     if(!anterior||tiempo>(anterior.tiempo||0))borradas.set(id,{...m.antes,id,tiempo});
+   });
+   historicos=[...registros,...borradas.values()];ultimaCarga=new Date();pintar();
+ }
+ function pintar(){
+   const vig=registros.filter(rango),hist=historicos.filter(rango);
+   const resumen=labs.map(lab=>{const h=hist.filter(x=>x.laboratorio===lab),v=vig.filter(x=>x.laboratorio===lab);return {lab,cuenta:h.length,horas:h.reduce((a,x)=>a+minutos(x),0)/60,vigentes:v.length,horasVigentes:v.reduce((a,x)=>a+minutos(x),0)/60}});
+   const total=hist.length,horas=resumen.reduce((a,x)=>a+x.horas,0),max=resumen.reduce((a,b)=>a.horas>b.horas?a:b);
+   const datos=[['Reservas históricas',numero(total)],['Horas históricas',numero(horas)+' h'],['Reservas vigentes',numero(vig.length)],['Laboratorio más reservado',max.horas?nombreLabVisible(max.lab):'—']];
+   $('metricasResumen').replaceChildren();datos.forEach(([titulo,valor])=>{const e=document.createElement('div');e.className='metricas-tarjeta';const s=document.createElement('small');s.textContent=titulo;const b=document.createElement('b');b.textContent=valor;e.append(s,b);$('metricasResumen').append(e)});
+   $('metricasTarjetas').replaceChildren();$('metricasGrafico').replaceChildren();$('metricasCuerpo').replaceChildren();
+   const mayor=Math.max(1,...resumen.map(x=>x.horas));
+   resumen.sort((a,b)=>b.horas-a.horas||a.lab.localeCompare(b.lab,'es'));
+   resumen.forEach(x=>{
+     const tarjeta=document.createElement('div');tarjeta.className='metricas-tarjeta';
+     const t=document.createElement('small');t.textContent=nombreLabVisible(x.lab);const b=document.createElement('b');b.textContent=numero(x.cuenta)+' reservas';const p=document.createElement('div');p.textContent=numero(x.horas)+' horas';p.style.marginTop='5px';tarjeta.append(t,b,p);$('metricasTarjetas').append(tarjeta);
+     const fila=document.createElement('div');fila.className='metricas-fila';const nombre=document.createElement('span');nombre.textContent=nombreLabVisible(x.lab);const barra=document.createElement('div');barra.className='metricas-barra';const relleno=document.createElement('div');relleno.style.width=(x.horas/mayor*100)+'%';barra.append(relleno);const cantidad=document.createElement('strong');cantidad.textContent=numero(x.horas)+' h';fila.append(nombre,barra,cantidad);$('metricasGrafico').append(fila);
+     const tr=document.createElement('tr');[nombreLabVisible(x.lab),numero(x.cuenta),numero(x.horas),numero(x.vigentes),numero(x.horasVigentes),x.cuenta?numero(x.horas/x.cuenta):'—'].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td)});$('metricasCuerpo').append(tr);
+   });
+   $('metricasEstado').textContent='Actualizado: '+(ultimaCarga?.toLocaleString('es-AR')||'—')+' · '+hist.length+' reservas en el período seleccionado. Las métricas se recalculan al abrir el panel o al pulsar Actualizar.';
+   window.__metricasExportar=resumen;
+ }
+ btn.onclick=async()=>{if(!isAdmin||!usuarioAutorizado)return;modal.classList.add('visible');try{await cargar()}catch(e){$('metricasEstado').textContent='No se pudieron cargar las métricas: '+e.message}};
+ $('metricasCerrar').onclick=()=>modal.classList.remove('visible');
+ modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('visible')});
+ $('metricasAplicar').onclick=()=>{if($('metricasDesde').value&&$('metricasHasta').value&&$('metricasDesde').value>$('metricasHasta').value){alert('La fecha desde debe ser anterior a la fecha hasta.');return}pintar()};
+ $('metricasHistorico').onclick=()=>{$('metricasDesde').value='';$('metricasHasta').value='';pintar()};
+ $('metricasActualizar').onclick=async()=>{try{await cargar()}catch(e){$('metricasEstado').textContent=e.message}};
+ $('metricasImprimir').onclick=()=>window.print();
+ $('metricasCSV').onclick=()=>{
+   const filas=[['Laboratorio','Reservas históricas','Horas históricas','Reservas vigentes','Horas vigentes','Promedio horas'],...(window.__metricasExportar||[]).map(x=>[nombreLabVisible(x.lab),x.cuenta,x.horas.toFixed(2),x.vigentes,x.horasVigentes.toFixed(2),x.cuenta?(x.horas/x.cuenta).toFixed(2):'0'])];
+   const csv='\ufeff'+filas.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));const a=document.createElement('a');a.href=url;a.download='metricas_laboratorios_'+fechaHoy()+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ };
+ auth.onAuthStateChanged(async user=>{
+   usuarioAutorizado=false;btn.style.display='none';modal.classList.remove('visible');
+   if(!user)return;
+   try{const doc=await db.collection('usuarios').doc(user.uid).get();if(auth.currentUser?.uid!==user.uid)return;usuarioAutorizado=doc.exists&&doc.data().rol==='admin';btn.style.display=usuarioAutorizado?'inline-block':'none'}catch(e){console.error('Métricas: verificación de rol',e)}
+ });
+})();
+</script>
 </body>
 </html>
