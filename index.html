@@ -577,6 +577,28 @@ body{font-family:Archivo,'Segoe UI',Arial,sans-serif;background:var(--ba-bg);col
   #calendarTable tbody th.time-slot,
   #calendarTable tbody th.time-slot:first-child { font-size: 0.79rem !important; }
 }
+
+/* === GRILLA DE HORARIOS DESDE GOOGLE SHEETS === */
+.hs-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px}
+.hs-tab{border:1px solid var(--ba-line);background:#fff;color:var(--ba-ink);padding:7px 14px;border-radius:999px;font-weight:600;font-size:.85rem;cursor:pointer}
+.hs-tab.active{background:var(--ba-ink);color:#fff;border-color:var(--ba-ink)}
+.hs-search{flex:1;min-width:180px;border:1px solid var(--ba-line);border-radius:8px;padding:8px 12px;font-size:.88rem}
+.hs-refresh{border:1px solid var(--ba-line);background:#fff;color:var(--ba-blue);padding:7px 12px;border-radius:8px;font-weight:600;font-size:.85rem;cursor:pointer}
+.hs-meta{font-size:.78rem;color:var(--ba-muted);margin:0 0 10px}
+.hs-section{font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ba-blue);margin:18px 0 8px}
+.hs-wrap{overflow-x:auto;border:1px solid var(--ba-line);border-radius:10px}
+.hs-table{width:100%;border-collapse:collapse;font-size:.83rem;min-width:820px}
+.hs-table th{background:var(--ba-ink);color:#fff;text-align:left;padding:9px 10px;font-weight:600;white-space:nowrap;position:sticky;top:0;z-index:2}
+.hs-table td{padding:8px 10px;border-top:1px solid var(--ba-line);vertical-align:top;color:var(--ba-ink)}
+.hs-table tbody tr:nth-child(even) td{background:var(--ba-bg)}
+.hs-table td.hs-group{font-weight:700;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;color:var(--ba-blue)}
+.hs-table td.hs-name{font-weight:600;white-space:nowrap}
+.hs-table td.hs-time{white-space:nowrap;font-variant-numeric:tabular-nums}
+.hs-table td.hs-multi{white-space:pre-line;min-width:150px}
+.hs-table td.hs-empty{color:#b5c2ca;text-align:center}
+.hs-table td.hs-obs{color:var(--ba-muted);font-size:.78rem;min-width:180px}
+.hs-table th.hs-today,.hs-table td.hs-today{box-shadow:inset 0 0 0 9999px rgba(255,205,2,.18)}
+.hs-msg{padding:28px;text-align:center;color:var(--ba-muted)}
 </style>
 </head>
 <body>
@@ -2351,10 +2373,141 @@ document.getElementById('cancelSelection').onclick = () => {
     cancelRangeSelection();
 };
 document.getElementById('btnLimpiar').onclick  = clearDay;
+// ======================== HORARIOS DESDE GOOGLE SHEETS ========================
+// Lee la planilla "Disponibilidad horaria" en vivo cada vez que se abre el modal.
+// La planilla tiene que estar compartida como "Cualquier persona con el enlace: Lector".
+const HS_SHEET_ID = '1RKwFzVgnx0CJXTWc7lgMz29UG3DZlcAFkR3mRQ0Fu-Y';
+const HS_PESTANAS = ['Grilla', 'Por laboratorio'];
+const HS_DIAS = ['Lunes','Martes','Miércoles','Jueves','Viernes'];
+let hsPestana = 'Grilla';
+let hsCache = {};
+
+function hsEsc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function hsParseCSV(texto) {
+    const filas = []; let fila = [], campo = '', comillas = false;
+    for (let i = 0; i < texto.length; i++) {
+        const c = texto[i];
+        if (comillas) {
+            if (c === '"' && texto[i + 1] === '"') { campo += '"'; i++; }
+            else if (c === '"') comillas = false;
+            else campo += c;
+        } else if (c === '"') comillas = true;
+        else if (c === ',') { fila.push(campo); campo = ''; }
+        else if (c === '\n') { fila.push(campo); filas.push(fila); fila = []; campo = ''; }
+        else if (c !== '\r') campo += c;
+    }
+    if (campo !== '' || fila.length) { fila.push(campo); filas.push(fila); }
+    return filas.map(f => f.map(v => v.trim()));
+}
+
+async function hsCargar(pestana, forzar = false) {
+    if (!forzar && hsCache[pestana]) return hsCache[pestana];
+    const url = `https://docs.google.com/spreadsheets/d/${HS_SHEET_ID}/gviz/tq?tqx=out:csv&headers=0&sheet=${encodeURIComponent(pestana)}&t=${Date.now()}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('No se pudo leer la planilla (' + res.status + ').');
+    const texto = await res.text();
+    if (/^\s*<(!doctype|html)/i.test(texto)) throw new Error('La planilla no es accesible. Revisá que esté compartida con "Cualquier persona con el enlace".');
+    const filas = hsParseCSV(texto).filter(f => f.some(v => v !== ''));
+    hsCache[pestana] = { filas, hora: new Date() };
+    return hsCache[pestana];
+}
+
+// Agrupa las filas en secciones: una fila con un solo valor (ej. "DOCENTE") abre una sección,
+// y la fila que tiene "Lunes" es el encabezado de columnas.
+function hsSecciones(filas) {
+    const secciones = []; let actual = null;
+    filas.forEach(f => {
+        const llenas = f.filter(v => v !== '');
+        if (llenas.length === 1 && f[0] !== '' && !HS_DIAS.includes(f[0])) {
+            actual = { titulo: f[0], encabezado: null, filas: [] }; secciones.push(actual); return;
+        }
+        if (f.includes('Lunes')) {
+            if (!actual || actual.encabezado) { actual = { titulo: '', encabezado: null, filas: [] }; secciones.push(actual); }
+            actual.encabezado = f; return;
+        }
+        if (!actual) { actual = { titulo: '', encabezado: null, filas: [] }; secciones.push(actual); }
+        actual.filas.push(f);
+    });
+    return secciones.filter(s => s.encabezado && s.filas.length);
+}
+
+function hsRender() {
+    const cont = document.getElementById('hsContenido');
+    const datos = hsCache[hsPestana];
+    if (!datos) return;
+    const filtro = (document.getElementById('hsBuscar').value || '').toLowerCase().trim();
+    const hoy = HS_DIAS[new Date().getDay() - 1] || '';
+    const secciones = hsSecciones(datos.filas);
+    if (!secciones.length) { cont.innerHTML = '<div class="hs-msg">La planilla no tiene datos para mostrar.</div>'; return; }
+
+    let html = '';
+    secciones.forEach(sec => {
+        const enc = sec.encabezado.slice();
+        while (enc.length && enc[enc.length - 1] === '') enc.pop();
+        const n = enc.length;
+        const filas = sec.filas.filter(f => !filtro || f.join(' ').toLowerCase().includes(filtro));
+        if (!filas.length) return;
+        if (sec.titulo) html += `<div class="hs-section">${hsEsc(sec.titulo)}</div>`;
+        html += '<div class="hs-wrap"><table class="hs-table"><thead><tr>';
+        enc.forEach(h => { html += `<th class="${h === hoy ? 'hs-today' : ''}">${hsEsc(h)}</th>`; });
+        html += '</tr></thead><tbody>';
+        let grupoAnterior = null;
+        filas.forEach(f => {
+            html += '<tr>';
+            for (let i = 0; i < n; i++) {
+                const col = enc[i], v = f[i] ?? '';
+                const esDia = HS_DIAS.includes(col);
+                const vacio = v === '' || v === '—' || v === '-';
+                let cls = [];
+                if (col === hoy) cls.push('hs-today');
+                if (i === 0) {
+                    cls.push('hs-group');
+                    html += `<td class="${cls.join(' ')}">${v === grupoAnterior ? '' : hsEsc(v)}</td>`;
+                    grupoAnterior = v; continue;
+                }
+                if (/nombre/i.test(col)) cls.push('hs-name');
+                else if (/observ/i.test(col)) cls.push('hs-obs');
+                else if (esDia && vacio) cls.push('hs-empty');
+                else if (esDia) cls.push(v.includes('\n') ? 'hs-multi' : 'hs-time');
+                const texto = esDia && vacio ? '—' : v.replace(/\s*-\s*(?=\d)/g, '–');
+                html += `<td class="${cls.join(' ')}">${hsEsc(texto)}</td>`;
+            }
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+    });
+    cont.innerHTML = html || '<div class="hs-msg">No hay coincidencias con la búsqueda.</div>';
+    document.getElementById('hsMeta').textContent =
+        'Datos en vivo desde la planilla · actualizado ' + datos.hora.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function hsMostrar(forzar = false) {
+    const cont = document.getElementById('hsContenido');
+    document.querySelectorAll('.hs-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === hsPestana));
+    if (forzar || !hsCache[hsPestana]) cont.innerHTML = '<div class="hs-msg">Cargando horarios…</div>';
+    try { await hsCargar(hsPestana, forzar); hsRender(); }
+    catch (e) { cont.innerHTML = `<div class="hs-msg">⚠️ ${hsEsc(e.message)}</div>`; }
+}
+
 document.getElementById('btnHorarios').onclick = () => {
-    document.getElementById("horariosGridContainer").innerHTML =
-        '<iframe src="horarios_detalle.html" style="width:100%; height:75vh; border:none;"></iframe>';
-    document.getElementById("horariosModal").classList.add('visible');
+    document.getElementById('horariosModalTitle').textContent = '👨‍🏫 Disponibilidad horaria · Segundo cuatrimestre 2026';
+    document.getElementById('horariosGridContainer').innerHTML = `
+        <div class="hs-toolbar">
+            ${HS_PESTANAS.map(p => `<button class="hs-tab" data-tab="${hsEsc(p)}">${hsEsc(p)}</button>`).join('')}
+            <input id="hsBuscar" class="hs-search" type="search" placeholder="Buscar docente, laboratorio o rol…">
+            <button class="hs-refresh" id="hsActualizar" title="Volver a leer la planilla">↻ Actualizar</button>
+        </div>
+        <p class="hs-meta" id="hsMeta"></p>
+        <div id="hsContenido"></div>`;
+    document.querySelectorAll('.hs-tab').forEach(b => b.onclick = () => { hsPestana = b.dataset.tab; hsMostrar(); });
+    document.getElementById('hsBuscar').oninput = hsRender;
+    document.getElementById('hsActualizar').onclick = () => { hsCache = {}; hsMostrar(true); };
+    document.getElementById('horariosModal').classList.add('visible');
+    hsCache = {};          // cada apertura trae los datos más recientes
+    hsMostrar(true);
 };
 document.getElementById('closeModal').onclick = () => {
     document.getElementById('modal').classList.remove('visible');
