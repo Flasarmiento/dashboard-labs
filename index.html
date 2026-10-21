@@ -930,7 +930,8 @@ function rangoVisible() {
 function convertirReservas(snapshot) {
     const resultado = {};
     snapshot.forEach(doc => {
-        const data = doc.data();
+        // 'estimate' evita que createdAt/updatedAt lleguen vacíos justo después de guardar.
+        const data = doc.data({ serverTimestamps: 'estimate' });
         if (!data.fecha || !data.laboratorio) return;
         const { fecha, laboratorio: lab } = data;
         if (!resultado[fecha]) resultado[fecha] = {};
@@ -941,7 +942,10 @@ function convertirReservas(snapshot) {
             endHour: data.fin?.hour || 0, endMinute: data.fin?.minute || 0,
             color: data.color || colors[labs.indexOf(lab)] || '#153244',
             creadoPor: data.creadoPor, serieId: data.serieId || null,
-             docenteUid: data.docenteUid || "", docenteNombre: data.docenteNombre || "", docenteEmail: data.docenteEmail || ""
+             docenteUid: data.docenteUid || "", docenteNombre: data.docenteNombre || "", docenteEmail: data.docenteEmail || "",
+            creadoPorEmail: data.creadoPorEmail || "", modificadoPorEmail: data.modificadoPorEmail || "",
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : null,
+            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : null
         };
     });
     return resultado;
@@ -1890,7 +1894,25 @@ function renderDayView() {
                 inviteBtn.textContent = "✉";
                 inviteBtn.style.minWidth = "28px"; inviteBtn.setAttribute("aria-label","Enviar o actualizar invitación de Google Calendar");
                 inviteBtn.onclick = e => { e.stopPropagation(); abrirInvitacion(event.id); };
+
+                // Info de autoría: al pasar el mouse o con el botón ℹ️ (útil en tablets/celulares)
+                const infoBtn = document.createElement("button");
+                infoBtn.type = "button";
+                infoBtn.className = "edit-btn";
+                infoBtn.textContent = "ℹ️";
+                infoBtn.title = "Ver quién creó y modificó la reserva";
+                infoBtn.setAttribute("aria-label", "Ver quién creó y modificó la reserva");
+                infoBtn.onclick = e => {
+                    e.stopPropagation();
+                    if (autoriaActual === event.id) hideReservaTooltip();
+                    else showReservaTooltip(event, e.clientX, e.clientY);
+                };
+                block.addEventListener('mouseenter', e => showReservaTooltip(event, e.clientX, e.clientY));
+                block.addEventListener('mousemove',  e => moveReservaTooltip(e.clientX, e.clientY));
+                block.addEventListener('mouseleave', hideReservaTooltip);
+
                 controls.append(editBtn, timeBtn, delBtn, inviteBtn);
+                if (!INFO_AUTORIA_SOLO_ADMIN || isAdmin) controls.append(infoBtn);
                 block.append(titleDiv, timeDiv, controls);
                 startCell.appendChild(block);
             });
@@ -2021,7 +2043,14 @@ function renderWeekView() {
         allDaySlot: false,
         slotDuration: '00:30:00',
         firstDay: 1,
+        eventMouseEnter: function(info) {
+            const p = info.event.extendedProps;
+            const ev = events[p.date]?.[p.lab]?.[p.eventId];
+            if (ev) showReservaTooltip(ev, info.jsEvent.clientX, info.jsEvent.clientY);
+        },
+        eventMouseLeave: function() { hideReservaTooltip(); },
         eventClick: function(info) {
+            hideReservaTooltip();
             info.jsEvent.stopPropagation();
             bloquearCreacionPorEdicion();
             const lab     = info.event.extendedProps.lab;
@@ -2174,6 +2203,84 @@ function showLabTooltip(labName, event) {
     tt.style.top  = top  + 'px';
 }
 function hideLabTooltip() { document.getElementById("labTooltip").style.display = 'none'; }
+
+// ======================== INFO DE AUTORÍA DE CADA RESERVA ========================
+// Muestra quién creó la reserva y quién la modificó por última vez.
+// Para que la vean todos los usuarios (no solo admins), cambiar a false.
+const INFO_AUTORIA_SOLO_ADMIN = true;
+const autoriaCache = {};   // reservas viejas sin campos de autoría: se buscan en movimientos una sola vez
+
+function fmtFechaHora(d) {
+    if (!d) return '';
+    return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' }) + ' ' +
+           d.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }) + ' hs';
+}
+function escAutoria(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+async function autoriaDesdeMovimientos(id) {
+    if (autoriaCache[id]) return autoriaCache[id];
+    const snap = await db.collection('movimientos').where('reservaId', '==', id).get();
+    const movs = snap.docs.map(d => d.data())
+        .map(m => ({ ...m, t: m.timestamp?.toDate ? m.timestamp.toDate() : null }))
+        .sort((a, b) => (a.t || 0) - (b.t || 0));
+    const crear = movs.find(m => m.accion === 'crear');
+    const ultimo = movs[movs.length - 1];
+    autoriaCache[id] = {
+        creadoPorEmail: crear?.usuarioEmail || '', createdAt: crear?.t || null,
+        modificadoPorEmail: ultimo?.usuarioEmail || '', updatedAt: ultimo?.t || null
+    };
+    return autoriaCache[id];
+}
+function posicionarTooltip(tt, x, y) {
+    tt.style.display = 'block';
+    let left = x + 15, top = y + 12;
+    const rect = tt.getBoundingClientRect();
+    if (left + rect.width  > window.innerWidth  - 10) left = x - rect.width - 15;
+    if (top  + rect.height > window.innerHeight - 10) top  = y - rect.height - 12;
+    tt.style.left = Math.max(10, left) + 'px';
+    tt.style.top  = Math.max(10, top)  + 'px';
+}
+function htmlAutoria(ev, a, cargando) {
+    const creado = a.creadoPorEmail
+        ? `${escAutoria(a.creadoPorEmail)}${a.createdAt ? '<br><small>' + fmtFechaHora(a.createdAt) + '</small>' : ''}`
+        : (cargando ? 'Buscando…' : 'Sin registro');
+    const mismo = a.modificadoPorEmail && a.modificadoPorEmail === a.creadoPorEmail &&
+                  a.createdAt && a.updatedAt && Math.abs(a.updatedAt - a.createdAt) < 5000;
+    const modif = mismo ? 'Sin modificaciones'
+        : a.modificadoPorEmail
+            ? `${escAutoria(a.modificadoPorEmail)}${a.updatedAt ? '<br><small>' + fmtFechaHora(a.updatedAt) + '</small>' : ''}`
+            : (cargando ? 'Buscando…' : 'Sin registro');
+    return `<h4>${escAutoria(ev.title || 'Reserva')}</h4>
+        <p><span class="tooltip-label">🆕 Creada por:</span><br>${creado}</p>
+        <p><span class="tooltip-label">✏️ Última modificación:</span><br>${modif}</p>`;
+}
+let autoriaActual = null;
+async function showReservaTooltip(ev, x, y) {
+    if (INFO_AUTORIA_SOLO_ADMIN && !isAdmin) return;
+    const tt = document.getElementById('labTooltip');
+    autoriaActual = ev.id;
+    let a = { creadoPorEmail: ev.creadoPorEmail, modificadoPorEmail: ev.modificadoPorEmail,
+              createdAt: ev.createdAt, updatedAt: ev.updatedAt };
+    const faltan = !a.creadoPorEmail;
+    if (faltan && autoriaCache[ev.id]) { a = autoriaCache[ev.id]; }
+    tt.innerHTML = htmlAutoria(ev, a, faltan && !autoriaCache[ev.id]);
+    posicionarTooltip(tt, x, y);
+    if (faltan && !autoriaCache[ev.id]) {
+        try {
+            const r = await autoriaDesdeMovimientos(ev.id);
+            if (autoriaActual === ev.id && tt.style.display === 'block') { tt.innerHTML = htmlAutoria(ev, r, false); posicionarTooltip(tt, x, y); }
+        } catch (e) {
+            console.warn('No se pudo consultar movimientos:', e);
+            if (autoriaActual === ev.id) tt.innerHTML = htmlAutoria(ev, a, false);
+        }
+    }
+}
+function moveReservaTooltip(x, y) {
+    const tt = document.getElementById('labTooltip');
+    if (tt.style.display === 'block' && autoriaActual) posicionarTooltip(tt, x, y);
+}
+function hideReservaTooltip() { autoriaActual = null; hideLabTooltip(); }
 
 // ======================== HORARIOS DE PROFESORES ========================
 function showTeacherSchedule() {
