@@ -2953,5 +2953,411 @@ auth.onAuthStateChanged(async user => {
  });
 })();
 </script>
+<!-- =====================================================================
+     MEJORAS v1 — Pegar este bloque completo JUSTO ANTES de </body>
+     (después del último </script>). No reemplaza ninguna línea existente.
+     Para revertir: borrar este bloque.
+     ===================================================================== -->
+<style>
+/* ---------- 1) Encabezado de laboratorios fijo al hacer scroll ---------- */
+#calendarContainer{padding-top:0 !important}
+#calendarTable thead th{position:sticky;top:-1px;z-index:40 !important;box-shadow:inset 0 -2px 0 #c5d8e1,0 -4px 0 #e6f1f6}
+#calendarTable thead th:first-child{top:-1px;left:0;z-index:45 !important;box-shadow:0 -4px 0 #1d3343}
+
+/* ---------- 2) Más espacio para la grilla ---------- */
+#main{padding:8px 12px 10px !important}
+#institucionalHeader{min-height:0 !important;padding:6px 16px !important;margin-bottom:8px !important;border-top-width:3px !important}
+#institucionalHeader .inst-kicker{display:none}
+#institucionalHeader .inst-cds{height:30px !important;width:auto;max-width:260px}
+#institucionalHeader .inst-subtitle{font-size:.7rem;margin-top:2px}
+#institucionalHeader .inst-agency img{height:34px !important;width:170px !important}
+#toolbar{padding:6px 10px !important;margin-bottom:6px !important;gap:6px !important}
+#toolbar .btn{padding:6px 10px;font-size:.76rem}
+#dateNavigator{padding:2px 8px}
+#dateNavigator button{width:28px;height:28px;font-size:14px}
+#currentDateDisplay{font-size:.9rem;min-width:170px}
+#datePicker{padding:5px 8px}
+#accesoAgendaDocente{display:none !important}
+#btnDisponibilidad{background:var(--ba-blue) !important;color:#fff !important}
+#btnCompactar{background:#e9eff2 !important;color:var(--ba-ink) !important}
+body.encabezado-oculto #institucionalHeader{display:none !important}
+</style>
+
+<script>
+(function(){
+'use strict';
+
+/* =================== 2) Barra superior compacta =================== */
+const btnLogout = document.getElementById('btnLogout');
+const btnDisp = document.getElementById('btnDisponibilidad');
+if (btnDisp && btnLogout) {           // se mueve el botón (conserva su función)
+  btnDisp.removeAttribute('style');
+  btnDisp.textContent = '👨‍🏫 Disponibilidad';
+  btnLogout.before(btnDisp);
+}
+const btnComp = document.createElement('button');
+btnComp.id = 'btnCompactar'; btnComp.className = 'btn'; btnComp.type = 'button';
+btnLogout.before(btnComp);
+function aplicarEncabezado(oculto){
+  document.body.classList.toggle('encabezado-oculto', oculto);
+  btnComp.textContent = oculto ? '⤓ Mostrar logo' : '⤒ Ocultar logo';
+  btnComp.title = oculto ? 'Mostrar encabezado institucional' : 'Ocultar encabezado para ganar espacio';
+  try { localStorage.setItem('encabezadoOculto', oculto ? '1' : '0'); } catch(e) {}
+  setTimeout(() => { try { if (weekCalendar) weekCalendar.updateSize(); } catch(e) {} }, 50);
+}
+let ocultoInicial = false;
+try { ocultoInicial = localStorage.getItem('encabezadoOculto') === '1'; } catch(e) {}
+aplicarEncabezado(ocultoInicial);
+btnComp.onclick = () => aplicarEncabezado(!document.body.classList.contains('encabezado-oculto'));
+
+/* =================== 3) Varios docentes por reserva ===================
+   Campos NUEVOS en la reserva: docentes [{uid,nombre,email}], docentesUids [uid].
+   Se siguen guardando docenteUid/docenteEmail (primer docente) y docenteNombre
+   (todos los nombres unidos con " / "), así todo lo existente sigue funcionando. */
+const MAX_DOCENTES = 3;
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function uidsDe(r){
+  if (Array.isArray(r?.docentesUids) && r.docentesUids.length) return r.docentesUids.filter(Boolean);
+  return r?.docenteUid ? [r.docenteUid] : [];
+}
+function anterioresDe(r){
+  if (Array.isArray(r?.docentes) && r.docentes.length) return r.docentes;
+  return r?.docenteUid ? [{uid:r.docenteUid, nombre:r.docenteNombre||'', email:r.docenteEmail||''}] : [];
+}
+function datosDocentes(uids, anteriores){
+  const lista = [];
+  [...new Set((uids||[]).filter(Boolean))].forEach(uid => {
+    const d = docentesCache.find(x => x.uid === uid) || (anteriores||[]).find(x => x && x.uid === uid);
+    if (d) lista.push({uid:d.uid, nombre:String(d.nombre||''), email:String(d.email||'').toLowerCase()});
+  });
+  return {
+    docenteUid: lista[0]?.uid || '', docenteNombre: lista.map(d => d.nombre).join(' / '),
+    docenteEmail: lista[0]?.email || '', docentes: lista, docentesUids: lista.map(d => d.uid)
+  };
+}
+
+// Reconoce reservas viejas (un docente) y nuevas (varios)
+window.coincideDocente = function(r, uid, email){
+  if (!uid) return false;
+  if (Array.isArray(r.docentesUids) && r.docentesUids.includes(uid)) return true;
+  if (r.docenteUid === uid) return true;
+  const em = String(email||'').toLowerCase();
+  if (!em) return false;
+  if (r.docenteEmail && String(r.docenteEmail).toLowerCase() === em) return true;
+  return Array.isArray(r.docentes) && r.docentes.some(d => String(d?.email||'').toLowerCase() === em);
+};
+
+// Llenado de selectores sin duplicados si se llama dos veces seguidas
+const tokensSel = {};
+window.completarSelectorDocente = async function(id, seleccionado=''){
+  const token = (tokensSel[id]||0) + 1; tokensSel[id] = token;
+  const docentes = await cargarDocentes();
+  if (tokensSel[id] !== token) return;
+  const select = document.getElementById(id);
+  select.replaceChildren();
+  const vacio = document.createElement('option'); vacio.value=''; vacio.textContent='Sin docente asignado'; select.appendChild(vacio);
+  docentes.forEach(d => { const o=document.createElement('option'); o.value=d.uid; o.textContent=`${d.nombre} (${d.email})`; select.appendChild(o); });
+  if (seleccionado && !docentes.some(d => d.uid === seleccionado)) {
+    const o=document.createElement('option'); o.value=seleccionado; o.textContent='Docente anterior (cuenta inactiva)'; select.appendChild(o);
+  }
+  select.value = seleccionado || '';
+};
+
+async function montarSelectores(baseId, uids, anteriores=[]){
+  await completarSelectorDocente(baseId, uids[0] || '');
+  const base = document.getElementById(baseId);
+  let cont = document.getElementById(baseId + 'Extras');
+  if (!cont) {
+    cont = document.createElement('div'); cont.id = baseId + 'Extras';
+    cont.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+    base.closest('label').after(cont);
+  }
+  cont.replaceChildren();
+  const filas = document.createElement('div'); filas.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+  const agregar = document.createElement('button');
+  agregar.type='button'; agregar.className='btn'; agregar.textContent='+ Agregar otro docente';
+  agregar.style.cssText='align-self:flex-start;background:#246c80';
+  const actualizar = () => { agregar.style.display = (filas.children.length + 1 >= MAX_DOCENTES) ? 'none' : ''; };
+  const nombreAnterior = uid => (anteriores.find(a => a.uid === uid)?.nombre || 'Docente anterior') + ' (cuenta inactiva)';
+  const opcionInactivo = base.querySelector('option[value="' + CSS.escape(uids[0]||'') + '"]');
+  if (uids[0] && opcionInactivo && !docentesCache.some(d => d.uid === uids[0])) opcionInactivo.textContent = nombreAnterior(uids[0]);
+  const nuevaFila = sel => {
+    const fila = document.createElement('div'); fila.style.cssText='display:flex;gap:6px';
+    const s = document.createElement('select'); s.className = baseId + 'Extra'; s.style.cssText='flex:1;padding:9px';
+    [...base.options].forEach(op => { if (docentesCache.some(d => d.uid === op.value) || op.value === '') s.appendChild(op.cloneNode(true)); });
+    s.options[0].textContent = 'Elegir otro docente';
+    if (sel && !docentesCache.some(d => d.uid === sel)) { const o=document.createElement('option'); o.value=sel; o.textContent=nombreAnterior(sel); s.appendChild(o); }
+    s.value = sel || '';
+    const quitar = document.createElement('button'); quitar.type='button'; quitar.className='btn'; quitar.textContent='✕';
+    quitar.title='Quitar docente'; quitar.onclick = () => { fila.remove(); actualizar(); };
+    fila.append(s, quitar); filas.appendChild(fila); actualizar();
+  };
+  agregar.onclick = () => nuevaFila('');
+  uids.slice(1).forEach(u => nuevaFila(u));
+  cont.append(filas, agregar); actualizar();
+}
+function leerUids(baseId){
+  const vals = [document.getElementById(baseId).value, ...[...document.querySelectorAll('.' + baseId + 'Extra')].map(s => s.value)];
+  return [...new Set(vals.filter(Boolean))];
+}
+
+// Disponibilidad de todos los docentes elegidos (una consulta por fecha)
+async function revisarDocentes(uids, fechas, inicio, fin, excluir=[]){
+  const lista = [...new Set((uids||[]).filter(Boolean))];
+  const out = {conflictos:[], conteos:[]};
+  if (!lista.length) return out;
+  if (!docentesCache.length) { try { await cargarDocentes(); } catch(e) {} }
+  const info = lista.map(uid => { const d = docentesCache.find(x => x.uid === uid); return {uid, email:d?.email||'', nombre:d?.nombre||'Docente'}; });
+  for (const fecha of fechas) {
+    const snap = await db.collection('reservas').where('fecha','==',fecha).get();
+    for (const d of info) {
+      const mismas = snap.docs.filter(x => !excluir.includes(x.id) && coincideDocente(x.data(), d.uid, d.email));
+      if (mismas.length >= 2) out.conteos.push(`${d.nombre} — ${fecha}: ${mismas.length} actividades ya asignadas`);
+      mismas.forEach(x => { const r = x.data(); if (recMin(inicio) < recMin(r.fin) && recMin(fin) > recMin(r.inicio)) out.conflictos.push(`${d.nombre} — ${fecha} ${r.laboratorio} — ${r.titulo}`); });
+    }
+  }
+  return out;
+}
+
+/* =================== 4) Invitación automática de Google Calendar =================== */
+async function enviarInvitacion(reservaId, invitados){
+  const token = await currentUser.getIdToken();
+  const resp = await fetch('/api/calendar', {
+    method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+    body: JSON.stringify({accion:'crear', reservaId, invitados})
+  });
+  let res = {}; try { res = await resp.json(); } catch(e) {}
+  if (!resp.ok || !res.ok) throw new Error(res.error || 'No se pudo enviar la invitación');
+}
+function leerCorreos(texto){
+  return String(texto||'').split(/[,;\n]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+}
+
+// Controles de invitación en el formulario de nueva reserva
+function asegurarControlesInvitacion(){
+  if (document.getElementById('recEnviarInv')) return;
+  const caja = document.createElement('div');
+  caja.style.cssText = 'background:#eef7f1;border:1px solid #cfe6d6;padding:10px 12px;border-radius:8px;display:flex;flex-direction:column;gap:8px';
+  const l = document.createElement('label'); l.style.cssText='font-weight:600;cursor:pointer';
+  const cb = document.createElement('input'); cb.type='checkbox'; cb.id='recEnviarInv'; cb.checked=true;
+  l.append(cb, document.createTextNode(' ✉ Enviar invitación de Google Calendar a los docentes al guardar'));
+  const ta = document.createElement('textarea'); ta.id='recInvExtra'; ta.rows=2;
+  ta.placeholder='Otros correos para invitar (opcional, separados por coma)'; ta.style.cssText='width:100%;padding:8px;border:1px solid #ccc;border-radius:6px';
+  caja.append(l, ta);
+  recEl('recEstado').before(caja);
+}
+
+const recAbrirOriginal = window.recAbrir;
+window.recAbrir = function(...args){
+  recAbrirOriginal.apply(this, args);
+  if (!recEl('recurrenteModal').classList.contains('visible')) return;
+  asegurarControlesInvitacion();
+  recEl('recEnviarInv').checked = true; recEl('recInvExtra').value = '';
+  montarSelectores('recDocente', []).catch(e => console.error('Docentes:', e));
+};
+
+// Guardar nueva reserva (misma lógica original + varios docentes + invitación)
+async function recGuardarV2(){
+  const boton = recEl('recGuardar'); if (boton.disabled) return;
+  try {
+    if (!isAdmin) throw new Error('Solo los administradores pueden reservar.');
+    const titulo = recEl('recTitulo').value.trim(), lab = recEl('recLab').value;
+    if (!titulo) throw new Error('Escribí el nombre de la actividad.');
+    const inicio = recHora(recEl('recInicio').value), fin = recHora(recEl('recFin').value);
+    if (recMin(inicio) < 480 || recMin(fin) > 1320 || recMin(inicio) >= recMin(fin)) throw new Error('El horario debe estar entre las 08:00 y las 22:00.');
+    const fechas = recFechasElegidas();
+    const docUids = leerUids('recDocente');
+    if (fechas.length > 150) throw new Error('Máximo 150 reservas por operación.');
+    const fines = fechas.filter(f => [0,6].includes(recDate(f).getDay()));
+    if (fines.length) throw new Error('No se permiten sábados ni domingos: ' + fines.join(', '));
+    const enviar = !!recEl('recEnviarInv')?.checked;
+    const extras = leerCorreos(recEl('recInvExtra')?.value);
+    const malos = extras.filter(x => !EMAIL_OK.test(x));
+    if (malos.length) throw new Error('Correos inválidos: ' + malos.join(', '));
+    boton.disabled = true; recEl('recEstado').textContent = 'Comprobando ' + fechas.length + ' fechas...';
+    const ocupadas = await recComprobarFechas(fechas, lab, inicio, fin);
+    const disp = await revisarDocentes(docUids, fechas, inicio, fin);
+    if (disp.conflictos.length) throw new Error('Un docente tiene superposición horaria: ' + disp.conflictos.join('; '));
+    if (disp.conteos.length && !confirm('Advertencia: hay docentes con varias actividades:\n' + disp.conteos.join('\n') + '\n¿Querés continuar?')) return;
+    if (ocupadas.length) { recEl('recEstado').textContent = 'No se guardó ninguna reserva. Fechas ocupadas:\n' + ocupadas.join(', '); return; }
+    const datosDoc = datosDocentes(docUids);
+    const invitados = [...new Set([...datosDoc.docentes.map(d => d.email).filter(e => EMAIL_OK.test(e)), ...extras])];
+    if (enviar && invitados.length > 50) throw new Error('Máximo 50 destinatarios por invitación.');
+    const serieId = fechas.length > 1 ? db.collection('reservas').doc().id : null;
+    const creadas = [];
+    for (const fecha of fechas) {
+      const ref = db.collection('reservas').doc(), mov = db.collection('movimientos').doc();
+      const data = {fecha, laboratorio:lab, titulo, inicio, fin, color:colors[labs.indexOf(lab)],
+        creadoPor:currentUser.uid, creadoPorEmail:currentUser.email||'',
+        modificadoPor:currentUser.uid, modificadoPorEmail:currentUser.email||'',
+        createdAt:firebase.firestore.FieldValue.serverTimestamp(), updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+      Object.assign(data, datosDoc);
+      if (serieId) data.serieId = serieId;
+      const batch = db.batch(); batch.set(ref, data); batch.set(mov, nuevoMovimiento('crear', ref.id, null, data));
+      await batch.commit(); creadas.push({id:ref.id, fecha});
+      recEl('recEstado').textContent = `Guardadas ${creadas.length} de ${fechas.length}...`;
+    }
+    let resumenInv = '';
+    if (enviar && invitados.length) {
+      const fallidas = [];
+      for (let i = 0; i < creadas.length; i++) {
+        recEl('recEstado').textContent = `Reservas guardadas. Enviando invitación ${i+1} de ${creadas.length}...`;
+        try { await enviarInvitacion(creadas[i].id, invitados); }
+        catch(e) { console.error(e); fallidas.push(creadas[i].fecha + ' (' + e.message + ')'); }
+      }
+      resumenInv = fallidas.length
+        ? `\n\n⚠️ No se pudo confirmar la invitación de:\n${fallidas.join('\n')}\nRevisá Google Calendar antes de reenviar con el sobre ✉.`
+        : `\n\n✉ Invitación enviada a ${invitados.length} destinatario(s).`;
+    } else if (enviar) {
+      resumenInv = '\n\nNo se envió invitación: no hay docentes con correo ni otros destinatarios.';
+    }
+    recEl('recurrenteModal').classList.remove('visible');
+    alert('Se guardaron ' + creadas.length + ' reservas correctamente.' + resumenInv);
+  } catch(e) {
+    console.error(e);
+    recEl('recEstado').textContent = 'Error: ' + e.message + ' (si ocurrió durante el guardado, revisá las fechas ya creadas).';
+  } finally { boton.disabled = false; }
+}
+recEl('recGuardar').onclick = recGuardarV2;
+
+// Modificaciones de series: verifica todos los docentes
+window.recAccionSerie = async function(eventId, accion, data){
+  if (!isAdmin) return;
+  try {
+    const ref = db.collection('reservas').doc(eventId), snap = await ref.get();
+    if (!snap.exists) throw new Error('La reserva ya no existe.');
+    const serie = snap.data().serieId;
+    let docs = [snap];
+    if (serie) {
+      const opcion = prompt('Esta reserva pertenece a una serie.\n1 → Solo esta fecha\n2 → Toda la serie\n0 → Cancelar', '1');
+      if (opcion !== '1' && opcion !== '2') return;
+      if (opcion === '2') docs = (await db.collection('reservas').where('serieId','==',serie).get()).docs;
+    }
+    if (!docs.length) return;
+    if (docs.some(d => d.data().googleInviteState === 'pending')) throw new Error('Hay invitaciones pendientes de verificación. Revisá Google Calendar.');
+    if (accion === 'eliminar' && !confirm(`¿Eliminar ${docs.length} reserva(s)? Se cancelarán también sus invitaciones de Google Calendar.`)) return;
+    if (accion === 'modificar' && (data.laboratorio || data.inicio || data.fin || data.docentesUids)) {
+      const ids = docs.map(d => d.id);
+      for (const d of docs) {
+        const r = d.data(), lab = data.laboratorio || r.laboratorio, inicio = data.inicio || r.inicio, fin = data.fin || r.fin;
+        const conflictos = await recComprobarFechas([r.fecha], lab, inicio, fin, ids);
+        if (conflictos.length) throw new Error('Conflicto en ' + r.fecha + '. No se modificó la serie.');
+        const uids = data.docentesUids !== undefined ? data.docentesUids : uidsDe(r);
+        const chk = await revisarDocentes(uids, [r.fecha], inicio, fin, ids);
+        if (chk.conflictos.length) throw new Error('Superposición docente en ' + r.fecha + ': ' + chk.conflictos.join('; '));
+      }
+    }
+    let procesadas = 0;
+    for (const doc of docs) {
+      const r = doc.data();
+      if (r.googleEventId) await calendarAccion(accion === 'eliminar' ? 'cancelar' : 'modificar', doc.id, accion === 'modificar' ? data : null);
+      else if (accion === 'eliminar') await eliminarReserva(doc.id);
+      else await actualizarReserva(doc.id, data);
+      procesadas++;
+    }
+    if (docs.length > 1) alert(`Operación completada: ${procesadas} de ${docs.length} reservas.`);
+    return true;
+  } catch(e) {
+    console.error(e);
+    alert('No se pudo completar la operación: ' + e.message + '\nSi era una serie, algunas fechas podrían haberse procesado. Revisá el calendario antes de repetir.');
+    return false;
+  }
+};
+
+// Editor de reservas con varios docentes + opción de enviar invitación
+let editarAnteriores = [];
+window.editEvent = async function(dateKey, lab, eventId){
+  if (!isAdmin) return;
+  bloquearCreacionPorEdicion();
+  recEl('recurrenteModal').classList.remove('visible');
+  const estado = document.getElementById('editarEstado');
+  estado.textContent = 'Cargando reserva...';
+  try {
+    const snap = await db.collection('reservas').doc(eventId).get();
+    if (!snap.exists) throw new Error('La reserva ya no existe.');
+    const r = snap.data();
+    editarReservaId = eventId;
+    editarAnteriores = anterioresDe(r);
+    document.getElementById('editarTitulo').value = r.titulo || '';
+    const selector = document.getElementById('editarLab'); selector.replaceChildren();
+    labs.forEach(nombre => { const o=document.createElement('option'); o.value=nombre; o.textContent=nombre; selector.append(o); });
+    selector.value = r.laboratorio;
+    await montarSelectores('editarDocente', uidsDe(r), editarAnteriores);
+    document.getElementById('editarFecha').value = r.fecha;
+    const formato = t => `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')}`;
+    document.getElementById('editarInicio').value = formato(r.inicio);
+    document.getElementById('editarFin').value = formato(r.fin);
+    let caja = document.getElementById('editarInvCaja');
+    if (!caja) {
+      caja = document.createElement('label'); caja.id='editarInvCaja';
+      caja.style.cssText='background:#eef7f1;border:1px solid #cfe6d6;padding:10px 12px;border-radius:8px;font-weight:600;cursor:pointer';
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.id='editarEnviarInv';
+      caja.append(cb, document.createTextNode(' ✉ Enviar invitación de Google Calendar a los docentes de esta reserva'));
+      estado.before(caja);
+    }
+    const puedeEnviar = !r.googleEventId && r.googleInviteState !== 'pending';
+    caja.style.display = puedeEnviar ? 'block' : 'none';
+    document.getElementById('editarEnviarInv').checked = false;
+    estado.textContent = '';
+    document.getElementById('editarReservaModal').classList.add('visible');
+  } catch(e) { console.error(e); alert('No se pudo abrir la reserva: ' + e.message); }
+};
+
+document.getElementById('editarGuardar').onclick = async () => {
+  if (!editarReservaId) return;
+  const id = editarReservaId;
+  const btn = document.getElementById('editarGuardar'), estado = document.getElementById('editarEstado');
+  try {
+    const titulo = document.getElementById('editarTitulo').value.trim();
+    const laboratorio = document.getElementById('editarLab').value;
+    const inicio = recHora(document.getElementById('editarInicio').value);
+    const fin = recHora(document.getElementById('editarFin').value);
+    if (!titulo) throw new Error('Ingresá el nombre de la actividad.');
+    if (recMin(inicio) < 480 || recMin(fin) > 1320 || recMin(inicio) >= recMin(fin)) throw new Error('El horario debe estar entre las 08:00 y las 22:00.');
+    const snap = await db.collection('reservas').doc(id).get();
+    if (!snap.exists) throw new Error('La reserva ya no existe.');
+    const actual = snap.data();
+    const nuevos = leerUids('editarDocente');
+    const cambiaDoc = nuevos.join('|') !== uidsDe(actual).join('|');
+    const datosDoc = datosDocentes(nuevos, editarAnteriores);
+    const cambios = {titulo, laboratorio, inicio, fin};
+    if (cambiaDoc) Object.assign(cambios, datosDoc);
+    const caja = document.getElementById('editarInvCaja');
+    const enviarInv = !!(caja && caja.style.display !== 'none' && document.getElementById('editarEnviarInv').checked);
+    const sinCambios = actual.titulo === titulo && actual.laboratorio === laboratorio &&
+      recMin(actual.inicio) === recMin(inicio) && recMin(actual.fin) === recMin(fin) && !cambiaDoc;
+    if (sinCambios && !enviarInv) { cerrarEditor(); return; }
+    btn.disabled = true;
+    let ok = true;
+    if (!sinCambios) {
+      estado.textContent = 'Comprobando disponibilidad...';
+      const ocupadas = await recComprobarFechas([actual.fecha], laboratorio, inicio, fin, [id]);
+      if (ocupadas.length) throw new Error('El laboratorio está ocupado en ese horario.');
+      const chk = await revisarDocentes(nuevos, [actual.fecha], inicio, fin, [id]);
+      if (chk.conflictos.length) throw new Error('Superposición de docente: ' + chk.conflictos.join('; '));
+      if (chk.conteos.length && !confirm('Hay docentes con dos o más actividades ese día:\n' + chk.conteos.join('\n') + '\n¿Continuar?')) return;
+      estado.textContent = 'Guardando y sincronizando con Google Calendar...';
+      ok = await recAccionSerie(id, 'modificar', cambios);
+    }
+    if (ok && enviarInv) {
+      const inv = datosDoc.docentes.map(d => d.email).filter(e => EMAIL_OK.test(e));
+      if (!inv.length) alert('Reserva guardada. No hay docentes con correo para invitar: usá el sobre ✉ para elegir destinatarios.');
+      else {
+        estado.textContent = 'Enviando invitación...';
+        try { await enviarInvitacion(id, inv); alert('Invitación enviada a ' + inv.length + ' docente(s).'); }
+        catch(e) { alert('La reserva se guardó, pero la invitación no se pudo confirmar: ' + e.message + '\nRevisá Google Calendar antes de reintentar con el sobre ✉.'); }
+      }
+    }
+    if (ok) { bloquearCreacionPorEdicion(); recEl('recurrenteModal').classList.remove('visible'); cerrarEditor(); }
+    else estado.textContent = 'No se aplicaron todos los cambios. Revisá el calendario antes de reintentar.';
+  } catch(e) { console.error(e); estado.textContent = 'Error: ' + e.message; }
+  finally { btn.disabled = false; }
+};
+
+})();
+</script>
+<!-- ===================== FIN MEJORAS v1 ===================== -->
+
 </body>
 </html>
