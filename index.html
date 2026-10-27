@@ -2954,7 +2954,7 @@ auth.onAuthStateChanged(async user => {
 })();
 </script>
 <!-- =====================================================================
-     MEJORAS v3 — Bloque agregado al final (antes de </body>).
+     MEJORAS v4 — Bloque agregado al final (antes de </body>).
      No reemplaza ninguna línea existente. Para revertir: borrar este bloque.
      Incluye: encabezado fijo, pantalla compacta, varios docentes,
      invitación automática, correos ocasionales al modificar,
@@ -3676,7 +3676,444 @@ window.obtenerDatosExportacion = async function(){
 
 })();
 </script>
-<!-- ===================== FIN MEJORAS v3 ===================== -->
+<!-- ===================== FIN MEJORAS v4 ===================== -->
+
+<!-- ===================== PENDIENTES / AVISOS (Etapa 1) =====================
+     Colección NUEVA en Firestore: "pendientes". No modifica reservas ni usuarios.
+     Requiere agregar la regla "match /pendientes/{id}" en Firestore.        -->
+<style>
+#btnPendientes{background:#8a5a12 !important;color:#fff !important;position:relative}
+#btnPendientes .mj-pn-num{display:inline-block;min-width:18px;padding:0 5px;margin-left:5px;border-radius:9px;background:#fff;color:#8a5a12;font-size:.7rem;font-weight:800;line-height:18px;text-align:center}
+#btnPendientes.mj-urgente .mj-pn-num{background:#c62828;color:#fff}
+#mjAvisoBanner{display:none;background:#fff4e0;border:1px solid #f0c27a;border-left:5px solid #e08a00;border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:.84rem;color:#4a3000;gap:10px;align-items:flex-start}
+#mjAvisoBanner.visible{display:flex}
+#mjAvisoBanner ul{margin:3px 0 0 18px;padding:0}
+#mjAvisoBanner .mj-ab-acc{margin-left:auto;display:flex;gap:6px;flex-shrink:0}
+#mjAvisoBanner .btn{padding:5px 9px;font-size:.75rem}
+#pendientesModal .modal-box{width:96%;max-width:860px;max-height:92vh;overflow:auto;gap:12px}
+.mj-pn-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.mj-pn-tabs .btn{background:#e9eff2 !important;color:#173449 !important;padding:7px 11px;font-size:.8rem}
+.mj-pn-tabs .btn.activo{background:#173449 !important;color:#fff !important}
+.mj-pn-lista{display:flex;flex-direction:column;gap:10px}
+.mj-pn-card{border:1px solid #d9e4ea;border-left:5px solid #7d93a1;border-radius:10px;padding:10px 12px;background:#fff}
+.mj-pn-card.vencido{border-left-color:#c62828;background:#fff6f6}
+.mj-pn-card.hoy{border-left-color:#e08a00;background:#fffaf0}
+.mj-pn-card.resuelto{border-left-color:#2e7d32;background:#f6fbf6;opacity:.92}
+.mj-pn-top{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.mj-chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:700;background:#e9eff2;color:#173449}
+.mj-chip.rojo{background:#c62828;color:#fff}.mj-chip.naranja{background:#e08a00;color:#fff}.mj-chip.verde{background:#2e7d32;color:#fff}
+.mj-pn-texto{white-space:pre-wrap;word-break:break-word;font-size:.95rem;color:#14232e}
+.mj-pn-meta{font-size:.78rem;color:#56707f;margin-top:6px;line-height:1.45}
+.mj-pn-acc{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.mj-pn-acc .btn{padding:5px 10px;font-size:.76rem}
+.mj-pn-form{background:#f5f8fa;border:1px solid #d9e4ea;border-radius:10px;padding:12px;display:none;flex-direction:column;gap:10px}
+.mj-pn-form.visible{display:flex}
+.mj-pn-form textarea,.mj-pn-form input,.mj-pn-form select{width:100%;padding:8px;border:1px solid #bbb;border-radius:6px;font:inherit;font-size:.9rem}
+.mj-pn-usuarios{max-height:150px;overflow:auto;border:1px solid #ddd;border-radius:6px;padding:6px 8px;background:#fff;font-size:.85rem}
+.mj-pn-usuarios label{display:block;padding:3px 0;cursor:pointer}
+.mj-pn-usuarios input{width:auto;margin-right:6px}
+.mj-pn-fila2{display:flex;gap:10px;flex-wrap:wrap}.mj-pn-fila2>label{flex:1 1 200px}
+.mj-pend-marca{display:inline-block;margin-left:4px;padding:0 4px;border-radius:6px;background:#e08a00;color:#fff;font-size:.62rem;font-weight:800;cursor:pointer;line-height:15px;vertical-align:middle}
+</style>
+
+<script>
+(function(){
+'use strict';
+const ZONA = 'America/Argentina/Buenos_Aires';
+const hoy = () => new Date().toLocaleDateString('en-CA', {timeZone: ZONA});
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_EN_TEXTO = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const fFecha = k => /^\d{4}-\d{2}-\d{2}$/.test(k||'') ? k.split('-').reverse().join('/') : '';
+const fMomento = t => { try { const d = t?.toDate ? t.toDate() : null; return d ? d.toLocaleString('es-AR', {timeZone: ZONA, day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : ''; } catch(e) { return ''; } };
+const labVisible = l => (typeof nombreLabVisible === 'function' ? nombreLabVisible(l) : l);
+const el = (tag, props={}, ...hijos) => { const e = document.createElement(tag); Object.assign(e, props); hijos.flat().forEach(h => h != null && e.append(h)); return e; };
+
+let soyAdmin = false, miEmail = '', miUid = '', miNombre = '';
+let abiertos = [], resueltos = [], usuarios = [];
+let desuscribir = null, filtro = 'mios', filtroLab = null, editandoId = null, errorPermisos = '';
+
+/* ---------- Botón, cartel y ventana ---------- */
+const btn = el('button', {id:'btnPendientes', className:'btn', type:'button', title:'Pendientes, minutas y avisos'});
+btn.style.display = 'none';
+const ancla = document.getElementById('btnCompactar') || document.getElementById('btnLogout');
+ancla.before(btn);
+
+const banner = el('div', {id:'mjAvisoBanner', role:'status'});
+document.getElementById('toolbar').before(banner);
+
+const modal = el('div', {id:'pendientesModal', className:'modal-overlay'});
+modal.style.zIndex = '25500';
+modal.innerHTML = `
+<div class="modal-box">
+  <div class="modal-header"><h3>📌 Pendientes y avisos</h3><button class="modal-close-btn" id="pnCerrar" title="Cerrar">✕</button></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <div class="mj-pn-tabs" id="pnTabs"></div>
+    <div style="margin-left:auto;display:flex;gap:6px">
+      <button class="btn" id="pnMinuta" type="button" title="Imprimir o guardar en PDF la lista que estás viendo">🖨 Minuta</button>
+      <button class="btn" id="pnNuevo" type="button" style="background:#21855c">+ Nuevo pendiente</button>
+    </div>
+  </div>
+  <div id="pnFiltroLab"></div>
+  <div class="mj-pn-form" id="pnForm">
+    <b id="pnFormTitulo">Nuevo pendiente</b>
+    <label>¿Qué hay que hacer?<textarea id="pnTexto" rows="3" maxlength="2000" placeholder="Ej.: Poner el SUM en condiciones, viene la ministra. Podés escribir correos en el texto (ej. julian.sikora@bue.edu.ar) y se agregan solos como destinatarios."></textarea></label>
+    <label>Para (personas de la lista)<input id="pnBuscar" type="search" placeholder="🔎 Buscar por nombre o correo"></label>
+    <div class="mj-pn-usuarios" id="pnUsuarios">Cargando...</div>
+    <label>Otros correos (opcional, separados por coma)<input id="pnOtros" placeholder="alguien@bue.edu.ar"></label>
+    <div class="mj-pn-fila2">
+      <label>Vence (opcional)<input id="pnVence" type="date"></label>
+      <label>Espacio relacionado (opcional)<select id="pnLab"></select></label>
+    </div>
+    <div id="pnFormEstado" style="font-size:.85rem;color:#b71c1c;white-space:pre-wrap"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" id="pnCancelar" type="button">Cancelar</button>
+      <button class="btn" id="pnGuardar" type="button" style="background:#21855c">Guardar pendiente</button>
+    </div>
+  </div>
+  <div id="pnEstado" style="font-size:.85rem;color:#56707f;white-space:pre-wrap"></div>
+  <div class="mj-pn-lista" id="pnLista"></div>
+</div>`;
+document.body.appendChild(modal);
+const $ = id => document.getElementById(id);
+modal.addEventListener('click', e => { e.stopPropagation(); if (e.target === modal) cerrar(); });
+['mousedown','mouseup','pointerdown'].forEach(t => modal.addEventListener(t, e => e.stopPropagation()));
+function cerrar(){ modal.classList.remove('visible'); filtroLab = null; try { bloquearCreacionPorEdicion(); } catch(e) {} }
+$('pnCerrar').onclick = cerrar;
+
+/* ---------- Datos ---------- */
+const esMio = p => (p.destinatarios || []).includes(miEmail);
+const puedeResolver = p => soyAdmin || esMio(p);
+function nombreDe(email){
+  const u = usuarios.find(x => x.email === email);
+  return u?.nombre || email;
+}
+function ordenar(lista){
+  return lista.slice().sort((a, b) => (a.vence || '9999') .localeCompare(b.vence || '9999') ||
+    ((a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)));
+}
+async function cargarUsuarios(){
+  if (usuarios.length) return usuarios;
+  const snap = await db.collection('usuarios').get();
+  usuarios = snap.docs.map(d => d.data())
+    .map(u => ({email: String(u.email || '').trim().toLowerCase(), nombre: String(u.nombre || u.displayName || u.email || ''), activo: u.activo !== false}))
+    .filter(u => EMAIL_OK.test(u.email) && u.activo)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  return usuarios;
+}
+async function cargarResueltos(){
+  try {
+    if (soyAdmin) {
+      const snap = await db.collection('pendientes').where('estado', '==', 'resuelto').get();
+      resueltos = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    }
+    resueltos.sort((a, b) => (b.resueltoAt?.seconds || 0) - (a.resueltoAt?.seconds || 0));
+  } catch(e) { console.error(e); $('pnEstado').textContent = 'No se pudieron cargar los resueltos: ' + e.message; }
+}
+
+function suscribir(){
+  if (desuscribir) { desuscribir(); desuscribir = null; }
+  errorPermisos = '';
+  const ok = snap => {
+    const docs = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    if (soyAdmin) abiertos = docs;
+    else { abiertos = docs.filter(p => p.estado === 'abierto'); resueltos = docs.filter(p => p.estado === 'resuelto'); }
+    actualizarTodo();
+  };
+  const err = e => {
+    console.error('Pendientes:', e);
+    errorPermisos = soyAdmin ? 'No se pudo leer la lista de pendientes. Revisá que esté agregada la regla "pendientes" en Firestore.\n(' + e.message + ')' : '';
+    abiertos = []; actualizarTodo();
+  };
+  desuscribir = soyAdmin
+    ? db.collection('pendientes').where('estado', '==', 'abierto').onSnapshot(ok, err)
+    : db.collection('pendientes').where('destinatarios', 'array-contains', miEmail).onSnapshot(ok, err);
+}
+
+auth.onAuthStateChanged(async user => {
+  if (desuscribir) { desuscribir(); desuscribir = null; }
+  abiertos = []; resueltos = []; usuarios = [];
+  if (!user) { soyAdmin = false; btn.style.display = 'none'; banner.classList.remove('visible'); modal.classList.remove('visible'); return; }
+  miUid = user.uid; miEmail = String(user.email || '').toLowerCase();
+  try {
+    const doc = await db.collection('usuarios').doc(user.uid).get();
+    if (auth.currentUser?.uid !== user.uid) return;
+    soyAdmin = doc.exists && doc.data().rol === 'admin';
+    miNombre = (doc.exists && doc.data().nombre) || user.displayName || miEmail;
+  } catch(e) { soyAdmin = false; miNombre = user.displayName || miEmail; }
+  filtro = 'mios';
+  if (miEmail) suscribir();
+  actualizarTodo();
+});
+
+/* ---------- Pintado general ---------- */
+function actualizarTodo(){
+  const mios = abiertos.filter(esMio);
+  const urgentes = mios.filter(p => p.vence && p.vence <= hoy());
+  // Botón: admins siempre; usuarios solo si tienen pendientes dirigidos
+  const visible = !!miEmail && (soyAdmin || abiertos.length > 0 || resueltos.length > 0);
+  btn.style.display = visible ? '' : 'none';
+  btn.replaceChildren('📌 Pendientes', el('span', {className:'mj-pn-num', textContent: String(mios.length)}));
+  btn.classList.toggle('mj-urgente', urgentes.length > 0);
+  btn.title = urgentes.length ? `Tenés ${urgentes.length} pendiente(s) que vencen hoy o están vencidos` : 'Pendientes, minutas y avisos';
+  pintarBanner(mios, urgentes);
+  pintarMarcas();
+  if (modal.classList.contains('visible')) pintarLista();
+}
+
+function pintarBanner(mios, urgentes){
+  let lista = urgentes.slice();
+  if (soyAdmin) abiertos.filter(p => p.creadoPor === miUid && !esMio(p) && p.vence && p.vence < hoy()).forEach(p => lista.push(p));
+  lista = ordenar(lista);
+  const firma = lista.map(p => p.id + p.vence).join('|');
+  let cerrado = '';
+  try { cerrado = sessionStorage.getItem('mjAvisoCerrado') || ''; } catch(e) {}
+  if (!lista.length || cerrado === firma) { banner.classList.remove('visible'); return; }
+  const items = lista.slice(0, 4).map(p => {
+    const estado = p.vence < hoy() ? 'VENCIDO ' + fFecha(p.vence) : 'vence HOY';
+    const quien = esMio(p) ? '' : ' (asignado a ' + (p.destinatarios || []).map(nombreDe).join(', ') + ')';
+    return el('li', {textContent: `${p.texto.length > 110 ? p.texto.slice(0, 110) + '…' : p.texto} — ${estado}${quien}`});
+  });
+  if (lista.length > 4) items.push(el('li', {textContent: `y ${lista.length - 4} más…`}));
+  const ver = el('button', {className:'btn', type:'button', textContent:'Ver pendientes'}); ver.onclick = () => abrir();
+  const x = el('button', {className:'btn', type:'button', textContent:'✕', title:'Ocultar hasta que haya novedades'});
+  x.onclick = () => { try { sessionStorage.setItem('mjAvisoCerrado', firma); } catch(e) {} banner.classList.remove('visible'); };
+  banner.replaceChildren(el('div', {}, el('b', {textContent:'📌 Recordatorio de pendientes'}), el('ul', {}, items)), el('div', {className:'mj-ab-acc'}, ver, x));
+  banner.classList.add('visible');
+}
+
+// Marcas 📌 en el encabezado del laboratorio cuando hay pendientes para ese día y espacio
+function pintarMarcas(){
+  document.querySelectorAll('.mj-pend-marca').forEach(m => m.remove());
+  let fecha = ''; try { fecha = getCurrentDateKey(); } catch(e) { return; }
+  const porLab = {};
+  abiertos.filter(p => p.laboratorio && p.vence === fecha).forEach(p => (porLab[p.laboratorio] = porLab[p.laboratorio] || []).push(p));
+  const ths = document.querySelectorAll('#calendarTable thead th');
+  Object.entries(porLab).forEach(([lab, lista]) => {
+    const th = ths[labs.indexOf(lab) + 1]; if (!th) return;
+    const m = el('span', {className:'mj-pend-marca', textContent:'📌' + lista.length, title: lista.map(p => '• ' + p.texto).join('\n')});
+    ['mousedown','mouseup','pointerdown','mouseenter','mousemove'].forEach(t => m.addEventListener(t, e => e.stopPropagation()));
+    m.onclick = e => { e.stopPropagation(); filtroLab = {lab, fecha}; abrir(); };
+    th.appendChild(m);
+  });
+}
+const renderOriginal = window.renderDayView;
+window.renderDayView = function(...a){ const r = renderOriginal.apply(this, a); try { pintarMarcas(); } catch(e) {} return r; };
+
+/* ---------- Ventana ---------- */
+async function abrir(){
+  try { bloquearCreacionPorEdicion(); } catch(e) {}
+  modal.classList.add('visible');
+  $('pnNuevo').style.display = soyAdmin ? '' : 'none';
+  ocultarForm();
+  if (filtroLab) filtro = 'todos';
+  if (filtro === 'resueltos') await cargarResueltos();
+  pintarLista();
+  if (soyAdmin) cargarUsuarios().then(() => pintarLista()).catch(e => console.error(e));
+}
+btn.onclick = () => { filtroLab = null; abrir(); };
+
+function pintarTabs(){
+  const tabs = soyAdmin
+    ? [['mios','Para mí'],['asignados','Asignados por mí'],['todos','Todos los abiertos'],['resueltos','Resueltos']]
+    : [['mios','Mis pendientes'],['resueltos','Resueltos']];
+  if (!tabs.some(t => t[0] === filtro)) filtro = 'mios';
+  $('pnTabs').replaceChildren(...tabs.map(([k, t]) => {
+    const b = el('button', {className:'btn' + (filtro === k ? ' activo' : ''), type:'button', textContent:t});
+    b.onclick = async () => { filtro = k; if (k === 'resueltos') { $('pnEstado').textContent = 'Cargando resueltos...'; await cargarResueltos(); $('pnEstado').textContent = ''; } pintarLista(); };
+    return b;
+  }));
+}
+function listaVisible(){
+  let lista;
+  if (filtro === 'resueltos') lista = resueltos.slice(0, 150);
+  else if (filtro === 'asignados') lista = ordenar(abiertos.filter(p => p.creadoPor === miUid));
+  else if (filtro === 'todos') lista = ordenar(abiertos);
+  else lista = ordenar(abiertos.filter(esMio));
+  if (filtroLab) lista = lista.filter(p => p.laboratorio === filtroLab.lab && p.vence === filtroLab.fecha);
+  return lista;
+}
+function pintarLista(){
+  pintarTabs();
+  const caja = $('pnFiltroLab'); caja.replaceChildren();
+  if (filtroLab) {
+    const quitar = el('button', {className:'btn', type:'button', textContent:'✕ Quitar filtro'}); quitar.style.cssText = 'padding:3px 8px;font-size:.72rem';
+    quitar.onclick = () => { filtroLab = null; pintarLista(); };
+    caja.append(el('span', {className:'mj-chip naranja', textContent:`Filtrando: ${labVisible(filtroLab.lab)} · ${fFecha(filtroLab.fecha)}`}), ' ', quitar);
+  }
+  if (errorPermisos) $('pnEstado').textContent = errorPermisos;
+  const lista = listaVisible();
+  const cont = $('pnLista'); cont.replaceChildren();
+  if (!lista.length) { cont.append(el('p', {textContent: filtro === 'resueltos' ? 'No hay pendientes resueltos.' : 'No hay pendientes en esta vista. 🎉', style:'color:#56707f'})); return; }
+  lista.forEach(p => cont.append(tarjeta(p)));
+}
+function chipVence(p){
+  if (p.estado === 'resuelto') return el('span', {className:'mj-chip verde', textContent:'✓ Resuelto'});
+  if (!p.vence) return el('span', {className:'mj-chip', textContent:'Sin vencimiento'});
+  if (p.vence < hoy()) return el('span', {className:'mj-chip rojo', textContent:'Vencido ' + fFecha(p.vence)});
+  if (p.vence === hoy()) return el('span', {className:'mj-chip naranja', textContent:'Vence HOY'});
+  return el('span', {className:'mj-chip', textContent:'Vence ' + fFecha(p.vence)});
+}
+function tarjeta(p){
+  const clase = p.estado === 'resuelto' ? 'resuelto' : (p.vence && p.vence < hoy() ? 'vencido' : (p.vence === hoy() ? 'hoy' : ''));
+  const card = el('div', {className:'mj-pn-card ' + clase});
+  const top = el('div', {className:'mj-pn-top'}, chipVence(p));
+  if (p.laboratorio) top.append(el('span', {className:'mj-chip', textContent:'📍 ' + labVisible(p.laboratorio)}));
+  if (esMio(p)) top.append(el('span', {className:'mj-chip', textContent:'Para vos', style:'background:#dbeefe'}));
+  const para = (p.destinatariosInfo && p.destinatariosInfo.length ? p.destinatariosInfo.map(d => d.nombre || d.email) : (p.destinatarios || []).map(nombreDe)).join(', ');
+  const meta = el('div', {className:'mj-pn-meta'});
+  meta.append(el('div', {textContent:'Para: ' + para}));
+  const creado = fMomento(p.createdAt), resuelto = fMomento(p.resueltoAt);
+  meta.append(el('div', {textContent:`De: ${p.creadoPorNombre || p.creadoPorEmail || ''}${creado ? ' · ' + creado : ''}`}));
+  if (p.estado === 'resuelto') meta.append(el('div', {textContent:`✓ Resuelto por ${p.resueltoNombre || p.resueltoPorEmail || ''}${resuelto ? ' el ' + resuelto : ''}${p.notaResolucion ? ' — ' + p.notaResolucion : ''}`, style:'color:#2e7d32;font-weight:600'}));
+  const acc = el('div', {className:'mj-pn-acc'});
+  const boton = (texto, color, fn, titulo='') => { const b = el('button', {className:'btn', type:'button', textContent:texto, title:titulo}); if (color) b.style.background = color; b.onclick = fn; acc.append(b); };
+  if (p.estado !== 'resuelto' && puedeResolver(p)) boton('✓ Marcar resuelto', '#2e7d32', () => resolver(p));
+  if (p.estado === 'resuelto' && puedeResolver(p)) boton('↺ Reabrir', '#5b6b78', () => reabrir(p));
+  if (soyAdmin) {
+    boton('✉ Avisar por email', '#246c80', () => abrirMail(p), 'Abre tu correo con el aviso ya escrito');
+    if (p.estado !== 'resuelto') boton('✏️ Editar', '', () => mostrarForm(p));
+    boton('🗑', '#9b2c2c', () => borrar(p), 'Eliminar pendiente');
+  }
+  card.append(top, el('div', {className:'mj-pn-texto', textContent:p.texto}), meta, acc);
+  return card;
+}
+
+/* ---------- Acciones ---------- */
+async function resolver(p){
+  const nota = prompt('Marcar como resuelto.\nComentario (opcional), por ej. "Listo, SUM armado en auditorio":', '');
+  if (nota === null) return;
+  try {
+    await db.collection('pendientes').doc(p.id).update({
+      estado:'resuelto', resueltoPor:miUid, resueltoPorEmail:miEmail, resueltoNombre:miNombre,
+      resueltoAt: firebase.firestore.FieldValue.serverTimestamp(), notaResolucion: nota.trim().slice(0, 500),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    if (filtro === 'resueltos') { await cargarResueltos(); pintarLista(); }
+  } catch(e) { console.error(e); alert('No se pudo marcar como resuelto: ' + e.message); }
+}
+async function reabrir(p){
+  if (!confirm('¿Reabrir este pendiente?')) return;
+  try {
+    await db.collection('pendientes').doc(p.id).update({
+      estado:'abierto', resueltoPor:'', resueltoPorEmail:'', resueltoNombre:'', resueltoAt:null, notaResolucion:'',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    resueltos = resueltos.filter(x => x.id !== p.id);
+    if (filtro === 'resueltos' && soyAdmin) await cargarResueltos();
+    pintarLista();
+  } catch(e) { console.error(e); alert('No se pudo reabrir: ' + e.message); }
+}
+async function borrar(p){
+  if (!confirm('¿Eliminar definitivamente este pendiente?\n\n' + p.texto)) return;
+  try { await db.collection('pendientes').doc(p.id).delete(); resueltos = resueltos.filter(x => x.id !== p.id); pintarLista(); }
+  catch(e) { console.error(e); alert('No se pudo eliminar: ' + e.message); }
+}
+function abrirMail(p){
+  const resumen = p.texto.replace(/\s+/g, ' ').slice(0, 70);
+  const lineas = [p.texto, ''];
+  if (p.vence) lineas.push('Vence: ' + fFecha(p.vence));
+  if (p.laboratorio) lineas.push('Espacio: ' + labVisible(p.laboratorio));
+  lineas.push('', 'Registrado en el sistema del Centro de Simulación (botón 📌 Pendientes), donde podés marcarlo como resuelto.');
+  const url = 'mailto:' + (p.destinatarios || []).join(',') + '?subject=' + encodeURIComponent('Pendiente: ' + resumen) + '&body=' + encodeURIComponent(lineas.join('\n'));
+  const a = el('a', {href:url}); document.body.append(a); a.click(); a.remove();
+}
+
+/* ---------- Formulario (solo admins) ---------- */
+function ocultarForm(){ $('pnForm').classList.remove('visible'); editandoId = null; }
+$('pnCancelar').onclick = ocultarForm;
+$('pnNuevo').onclick = () => mostrarForm(null);
+$('pnBuscar').addEventListener('input', () => {
+  const q = $('pnBuscar').value.trim().toLocaleLowerCase('es');
+  document.querySelectorAll('#pnUsuarios label').forEach(l => { l.style.display = l.textContent.toLocaleLowerCase('es').includes(q) ? '' : 'none'; });
+});
+async function mostrarForm(p){
+  if (!soyAdmin) return;
+  editandoId = p ? p.id : null;
+  $('pnFormTitulo').textContent = p ? 'Editar pendiente' : 'Nuevo pendiente';
+  $('pnTexto').value = p?.texto || ''; $('pnVence').value = p?.vence || ''; $('pnOtros').value = ''; $('pnBuscar').value = '';
+  $('pnFormEstado').textContent = '';
+  const sel = $('pnLab'); sel.replaceChildren(el('option', {value:'', textContent:'— Ninguno —'}));
+  labs.forEach(l => sel.append(el('option', {value:l, textContent:labVisible(l)})));
+  sel.value = p?.laboratorio || (filtroLab?.lab || '');
+  if (!p && filtroLab) $('pnVence').value = filtroLab.fecha;
+  $('pnForm').classList.add('visible');
+  $('pnTexto').focus();
+  const caja = $('pnUsuarios'); caja.textContent = 'Cargando...';
+  try {
+    await cargarUsuarios();
+    const elegidos = new Set(p?.destinatarios || []);
+    caja.replaceChildren(...usuarios.map(u => {
+      const cb = el('input', {type:'checkbox', value:u.email, className:'pnDest', checked: elegidos.has(u.email)});
+      elegidos.delete(u.email);
+      return el('label', {}, cb, `${u.nombre} (${u.email})`);
+    }));
+    if (elegidos.size) $('pnOtros').value = [...elegidos].join(', ');
+  } catch(e) { caja.textContent = 'No se pudo cargar la lista: ' + e.message; }
+}
+$('pnGuardar').onclick = async () => {
+  const b = $('pnGuardar'); if (b.disabled) return;
+  const est = $('pnFormEstado'); est.textContent = '';
+  try {
+    const texto = $('pnTexto').value.trim();
+    if (!texto) throw new Error('Escribí qué hay que hacer.');
+    const marcados = [...document.querySelectorAll('.pnDest:checked')].map(x => x.value);
+    const otros = $('pnOtros').value.split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+    const enTexto = (texto.match(EMAIL_EN_TEXTO) || []).map(x => x.toLowerCase());
+    const dest = [...new Set([...marcados, ...otros, ...enTexto])];
+    const malos = dest.filter(x => !EMAIL_OK.test(x));
+    if (malos.length) throw new Error('Correos inválidos: ' + malos.join(', '));
+    if (!dest.length) throw new Error('Elegí al menos una persona o escribí su correo.');
+    if (dest.length > 20) throw new Error('Máximo 20 destinatarios.');
+    const datos = {
+      texto: texto.slice(0, 2000), destinatarios: dest,
+      destinatariosInfo: dest.map(e => ({email:e, nombre:nombreDe(e)})),
+      vence: $('pnVence').value || '', laboratorio: $('pnLab').value || '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    b.disabled = true;
+    const nuevo = !editandoId;
+    if (nuevo) {
+      await db.collection('pendientes').add({...datos, estado:'abierto', creadoPor:miUid, creadoPorEmail:miEmail, creadoPorNombre:miNombre,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+    } else {
+      await db.collection('pendientes').doc(editandoId).update(datos);
+    }
+    ocultarForm();
+    if (enTexto.some(x => !marcados.includes(x) && !otros.includes(x))) $('pnEstado').textContent = 'Se agregaron como destinatarios los correos escritos en el texto.';
+    if (nuevo && confirm('Pendiente guardado.\n\n¿Querés avisarles ahora por email? (se abre tu correo con el mensaje ya escrito)')) {
+      abrirMail({texto: datos.texto, vence: datos.vence, laboratorio: datos.laboratorio, destinatarios: dest});
+    }
+  } catch(e) { console.error(e); est.textContent = 'Error: ' + e.message; }
+  finally { b.disabled = false; }
+};
+
+/* ---------- Minuta imprimible ---------- */
+$('pnMinuta').onclick = () => {
+  const lista = listaVisible();
+  if (!lista.length) { alert('No hay pendientes en esta vista para imprimir.'); return; }
+  const v = window.open('', '_blank'); if (!v) { alert('Permití las ventanas emergentes para imprimir.'); return; }
+  const escapar = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const porPersona = new Map();
+  lista.forEach(p => (p.destinatarios || []).forEach(e => { if (!porPersona.has(e)) porPersona.set(e, []); porPersona.get(e).push(p); }));
+  const titulos = {mios:'Para mí', asignados:'Asignados por mí', todos:'Todos los abiertos', resueltos:'Resueltos'};
+  let html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Minuta de pendientes</title><style>
+    body{font:13px Arial,sans-serif;color:#153244;margin:24px}h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:22px 0 6px;border-bottom:2px solid #153244;padding-bottom:3px}
+    table{width:100%;border-collapse:collapse}td,th{border:1px solid #cbd5df;padding:6px;vertical-align:top;text-align:left}th{background:#eef3f6}
+    .acciones{margin-bottom:14px}@media print{.acciones{display:none}}</style></head><body>
+    <div class="acciones"><button onclick="window.print()">Imprimir / Guardar como PDF</button></div>
+    <h1>Minuta de pendientes — Centro de Simulación</h1><p>${escapar(titulos[filtro] || '')} · Emitida el ${escapar(new Date().toLocaleString('es-AR', {timeZone: ZONA}))}</p>`;
+  porPersona.forEach((items, email) => {
+    html += `<h2>${escapar(nombreDe(email))} &lt;${escapar(email)}&gt;</h2><table><tr><th style="width:55%">Pendiente</th><th>Vence</th><th>Espacio</th><th>Estado</th></tr>`;
+    items.forEach(p => { html += `<tr><td style="white-space:pre-wrap">${escapar(p.texto)}</td><td>${escapar(fFecha(p.vence) || '—')}</td><td>${escapar(p.laboratorio ? labVisible(p.laboratorio) : '—')}</td><td>${p.estado === 'resuelto' ? '✓ Resuelto' + (p.notaResolucion ? ' — ' + escapar(p.notaResolucion) : '') : '☐ Pendiente'}</td></tr>`; });
+    html += '</table>';
+  });
+  html += '</body></html>';
+  v.document.open(); v.document.write(html); v.document.close();
+};
+
+})();
+</script>
+<!-- ===================== FIN PENDIENTES ===================== -->
 
 </body>
 </html>
