@@ -2954,7 +2954,7 @@ auth.onAuthStateChanged(async user => {
 })();
 </script>
 <!-- =====================================================================
-     MEJORAS v2 — Bloque agregado al final (antes de </body>).
+     MEJORAS v3 — Bloque agregado al final (antes de </body>).
      No reemplaza ninguna línea existente. Para revertir: borrar este bloque.
      Incluye: encabezado fijo, pantalla compacta, varios docentes,
      invitación automática, correos ocasionales al modificar,
@@ -2988,8 +2988,17 @@ body.encabezado-oculto #institucionalHeader{display:none !important}
 .mj-caja{background:#eef7f1;border:1px solid #cfe6d6;padding:10px 12px;border-radius:8px;display:flex;flex-direction:column;gap:8px}
 .mj-caja textarea,.mj-obs{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:.9rem;resize:vertical}
 .mj-nota{font-size:.8rem;color:#4b6170;margin:0}
-.event-block .event-obs{font-size:.6rem;font-weight:500;line-height:1.2;margin-top:2px;opacity:.95;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal}
+.event-block .event-obs{font:inherit;font-size:.6rem;font-weight:500;line-height:1.2;margin-top:3px;padding:2px 3px;
+  color:inherit;background:rgba(255,255,255,.14);border:1px dashed rgba(255,255,255,.55);border-radius:4px;cursor:pointer;
+  width:100%;text-align:left;white-space:pre-wrap;word-break:break-word;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical}
+.event-block .event-obs:hover{background:rgba(255,255,255,.28)}
+.mj-detalle{display:flex;flex-direction:column;gap:2px;font-size:.92rem}
+.mj-det-fila{display:grid;grid-template-columns:150px 1fr;gap:10px;padding:8px 4px;border-bottom:1px solid #e5edf1}
+.mj-det-k{font-weight:700;color:#173449}
+.mj-det-v{white-space:pre-wrap;word-break:break-word}
+.mj-det-obs{background:#fff8e1;border-radius:6px;border-bottom:0}
+@media(max-width:520px){.mj-det-fila{grid-template-columns:1fr;gap:2px}}
 </style>
 
 <script>
@@ -3064,7 +3073,7 @@ if (notaEditar) {
    Campos NUEVOS: docentes [{uid,nombre,email}], docentesUids [uid].
    Se siguen guardando docenteUid/docenteEmail (primer docente) y docenteNombre
    (todos los nombres unidos con " / "), así todo lo existente sigue funcionando. */
-const MAX_DOCENTES = 3;
+const MAX_DOCENTES = 4;   // total entre docentes de la lista y externos
 const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function uidsDe(r){
@@ -3072,18 +3081,25 @@ function uidsDe(r){
   return r?.docenteUid ? [r.docenteUid] : [];
 }
 function anterioresDe(r){
-  if (Array.isArray(r?.docentes) && r.docentes.length) return r.docentes;
+  if (Array.isArray(r?.docentes) && r.docentes.length) return r.docentes.filter(d => d && d.uid);
   return r?.docenteUid ? [{uid:r.docenteUid, nombre:r.docenteNombre||'', email:r.docenteEmail||''}] : [];
 }
-function datosDocentes(uids, anteriores){
+// Docentes externos (cargados a mano, no están en la lista de usuarios)
+function externosDe(r){
+  return Array.isArray(r?.docentes) ? r.docentes.filter(d => d && !d.uid && d.nombre).map(d => ({nombre:String(d.nombre), email:String(d.email||'').toLowerCase()})) : [];
+}
+function datosDocentes(uids, anteriores, externos=[]){
   const lista = [];
   [...new Set((uids||[]).filter(Boolean))].forEach(uid => {
     const d = docentesCache.find(x => x.uid === uid) || (anteriores||[]).find(x => x && x.uid === uid);
     if (d) lista.push({uid:d.uid, nombre:String(d.nombre||''), email:String(d.email||'').toLowerCase()});
   });
+  const registrados = lista.slice();
+  (externos||[]).forEach(e => lista.push({uid:'', nombre:e.nombre, email:e.email||'', externo:true}));
   return {
-    docenteUid: lista[0]?.uid || '', docenteNombre: lista.map(d => d.nombre).join(' / '),
-    docenteEmail: lista[0]?.email || '', docentes: lista, docentesUids: lista.map(d => d.uid)
+    docenteUid: registrados[0]?.uid || '', docenteNombre: lista.map(d => d.nombre).join(' / '),
+    docenteEmail: registrados[0]?.email || lista.find(d => d.email)?.email || '',
+    docentes: lista, docentesUids: registrados.map(d => d.uid)
   };
 }
 
@@ -3114,7 +3130,7 @@ window.completarSelectorDocente = async function(id, seleccionado=''){
   select.value = seleccionado || '';
 };
 
-async function montarSelectores(baseId, uids, anteriores=[]){
+async function montarSelectores(baseId, uids, anteriores=[], externos=[]){
   await completarSelectorDocente(baseId, uids[0] || '');
   const base = document.getElementById(baseId);
   let cont = document.getElementById(baseId + 'Extras');
@@ -3127,8 +3143,25 @@ async function montarSelectores(baseId, uids, anteriores=[]){
   const filas = document.createElement('div'); filas.style.cssText = 'display:flex;flex-direction:column;gap:8px';
   const agregar = document.createElement('button');
   agregar.type='button'; agregar.className='btn'; agregar.textContent='+ Agregar otro docente';
-  agregar.style.cssText='align-self:flex-start;background:#246c80';
-  const actualizar = () => { agregar.style.display = (filas.children.length + 1 >= MAX_DOCENTES) ? 'none' : ''; };
+  agregar.style.cssText='background:#246c80';
+  const agregarExt = document.createElement('button');
+  agregarExt.type='button'; agregarExt.className='btn'; agregarExt.textContent='+ Docente externo (manual)';
+  agregarExt.title='Para docentes ocasionales que no están en la lista';
+  agregarExt.style.cssText='background:#5b6b78';
+  const botones = document.createElement('div'); botones.style.cssText='display:flex;gap:8px;flex-wrap:wrap';
+  const actualizar = () => { const lleno = filas.children.length + 1 >= MAX_DOCENTES; agregar.style.display = agregarExt.style.display = lleno ? 'none' : ''; };
+  const filaExterna = (nombre='', email='') => {
+    const fila = document.createElement('div'); fila.style.cssText='display:flex;gap:6px;flex-wrap:wrap';
+    const n = document.createElement('input'); n.className = baseId + 'ExtNombre'; n.value = nombre; n.maxLength = 120;
+    n.placeholder = 'Nombre y apellido (docente externo)'; n.style.cssText='flex:2 1 200px;padding:9px;border:1px solid #999;border-radius:4px';
+    const m = document.createElement('input'); m.className = baseId + 'ExtEmail'; m.type = 'email'; m.value = email; m.maxLength = 160;
+    m.placeholder = 'Correo (opcional)'; m.style.cssText='flex:1 1 160px;padding:9px;border:1px solid #999;border-radius:4px';
+    const quitar = document.createElement('button'); quitar.type='button'; quitar.className='btn'; quitar.textContent='✕';
+    quitar.title='Quitar docente externo'; quitar.onclick = () => { fila.remove(); actualizar(); };
+    fila.append(n, m, quitar); filas.appendChild(fila); actualizar();
+    return n;
+  };
+  agregarExt.onclick = () => filaExterna().focus();
   const nombreAnterior = uid => (anteriores.find(a => a.uid === uid)?.nombre || 'Docente anterior') + ' (cuenta inactiva)';
   const opcionInactivo = base.querySelector('option[value="' + CSS.escape(uids[0]||'') + '"]');
   if (uids[0] && opcionInactivo && !docentesCache.some(d => d.uid === uids[0])) opcionInactivo.textContent = nombreAnterior(uids[0]);
@@ -3145,11 +3178,26 @@ async function montarSelectores(baseId, uids, anteriores=[]){
   };
   agregar.onclick = () => nuevaFila('');
   uids.slice(1).forEach(u => nuevaFila(u));
-  cont.append(filas, agregar); actualizar();
+  (externos||[]).forEach(e => filaExterna(e.nombre, e.email));
+  botones.append(agregar, agregarExt);
+  cont.append(filas, botones); actualizar();
 }
 function leerUids(baseId){
   const vals = [document.getElementById(baseId).value, ...[...document.querySelectorAll('.' + baseId + 'Extra')].map(s => s.value)];
   return [...new Set(vals.filter(Boolean))];
+}
+function leerExternos(baseId){
+  const nombres = [...document.querySelectorAll('.' + baseId + 'ExtNombre')];
+  const out = [];
+  nombres.forEach(n => {
+    const nombre = n.value.trim().replace(/\s+/g, ' ');
+    const email = (n.parentElement.querySelector('.' + baseId + 'ExtEmail')?.value || '').trim().toLowerCase();
+    if (!nombre && !email) return;
+    if (!nombre) throw new Error('Escribí el nombre del docente externo (' + email + ').');
+    if (email && !EMAIL_OK.test(email)) throw new Error('El correo del docente externo no es válido: ' + email);
+    if (!out.some(x => x.nombre.toLowerCase() === nombre.toLowerCase())) out.push({nombre, email});
+  });
+  return out;
 }
 
 // Disponibilidad de todos los docentes elegidos (una consulta por fecha)
@@ -3246,6 +3294,7 @@ async function recGuardarV2(){
     if (recMin(inicio) < 480 || recMin(fin) > 1320 || recMin(inicio) >= recMin(fin)) throw new Error('El horario debe estar entre las 08:00 y las 22:00.');
     const fechas = recFechasElegidas();
     const docUids = leerUids('recDocente');
+    const externos = leerExternos('recDocente');
     if (fechas.length > 150) throw new Error('Máximo 150 reservas por operación.');
     const fines = fechas.filter(f => [0,6].includes(recDate(f).getDay()));
     if (fines.length) throw new Error('No se permiten sábados ni domingos: ' + fines.join(', '));
@@ -3259,7 +3308,7 @@ async function recGuardarV2(){
     if (disp.conflictos.length) throw new Error('Un docente tiene superposición horaria: ' + disp.conflictos.join('; '));
     if (disp.conteos.length && !confirm('Advertencia: hay docentes con varias actividades:\n' + disp.conteos.join('\n') + '\n¿Querés continuar?')) return;
     if (ocupadas.length) { recEl('recEstado').textContent = 'No se guardó ninguna reserva. Fechas ocupadas:\n' + ocupadas.join(', '); return; }
-    const datosDoc = datosDocentes(docUids);
+    const datosDoc = datosDocentes(docUids, [], externos);
     const invitados = [...new Set([...datosDoc.docentes.map(d => d.email).filter(e => EMAIL_OK.test(e)), ...extras])];
     if (enviar && invitados.length > 50) throw new Error('Máximo 50 destinatarios por invitación.');
     const serieId = fechas.length > 1 ? db.collection('reservas').doc().id : null;
@@ -3363,6 +3412,7 @@ window.recAccionSerie = async function(eventId, accion, data){
 /* ---------- Editor de reservas ---------- */
 let editarAnteriores = [];
 let editarUidsOriginales = [];
+let editarExternosOriginales = [];
 function asegurarCajaInvitacionEditor(){
   let caja = document.getElementById('editarInvCaja');
   if (caja) return caja;
@@ -3392,13 +3442,14 @@ window.editEvent = async function(dateKey, lab, eventId){
     editarReservaId = eventId;
     editarAnteriores = anterioresDe(r);
     editarUidsOriginales = uidsDe(r);
+    editarExternosOriginales = externosDe(r);
     document.getElementById('editarTitulo').value = r.titulo || '';
     fijarTipo('editarTipoIniciativa', r.tipoIniciativa || '');
     document.getElementById('editarObservaciones').value = r.observaciones || '';
     const selector = document.getElementById('editarLab'); selector.replaceChildren();
     labs.forEach(nombre => { const o=document.createElement('option'); o.value=nombre; o.textContent=nombre; selector.append(o); });
     selector.value = r.laboratorio;
-    await montarSelectores('editarDocente', editarUidsOriginales, editarAnteriores);
+    await montarSelectores('editarDocente', editarUidsOriginales, editarAnteriores, editarExternosOriginales);
     document.getElementById('editarFecha').value = r.fecha;
     const formato = t => `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')}`;
     document.getElementById('editarInicio').value = formato(r.inicio);
@@ -3453,8 +3504,10 @@ document.getElementById('editarGuardar').onclick = async () => {
     if (!snap.exists) throw new Error('La reserva ya no existe.');
     const actual = snap.data();
     const nuevos = leerUids('editarDocente');
-    const cambiaDoc = nuevos.join('|') !== uidsDe(actual).join('|');
-    const datosDoc = datosDocentes(nuevos, editarAnteriores);
+    const externos = leerExternos('editarDocente');
+    const cambiaDoc = nuevos.join('|') !== uidsDe(actual).join('|') ||
+      JSON.stringify(externos) !== JSON.stringify(externosDe(actual));
+    const datosDoc = datosDocentes(nuevos, editarAnteriores, externos);
     const cambios = {titulo, laboratorio, inicio, fin, tipoIniciativa, observaciones};
     if (cambiaDoc) Object.assign(cambios, datosDoc);
     const sinCambios = actual.titulo === titulo && actual.laboratorio === laboratorio &&
@@ -3462,11 +3515,13 @@ document.getElementById('editarGuardar').onclick = async () => {
       (actual.tipoIniciativa || '') === tipoIniciativa && (actual.observaciones || '') === observaciones;
 
     // Correos a sumar: docentes recién agregados (si ya hay invitación) o todos (si se crea) + ocasionales
-    const correosDoc = uids => datosDoc.docentes.filter(d => uids.includes(d.uid)).map(d => d.email).filter(e => EMAIL_OK.test(e));
-    const agregados = nuevos.filter(u => !editarUidsOriginales.includes(u));
+    const correosOriginales = new Set([
+      ...editarAnteriores.filter(d => editarUidsOriginales.includes(d.uid)).map(d => String(d.email||'').toLowerCase()),
+      ...editarExternosOriginales.map(e => e.email)].filter(Boolean));
+    const todosCorreosDoc = datosDoc.docentes.map(d => d.email).filter(e => EMAIL_OK.test(e));
     let correos = [];
-    if (modo === 'ampliar') correos = [...new Set([...correosDoc(agregados), ...extras])];
-    else if (crearInv) correos = [...new Set([...correosDoc(nuevos), ...extras])];
+    if (modo === 'ampliar') correos = [...new Set([...todosCorreosDoc.filter(e => !correosOriginales.has(e)), ...extras])];
+    else if (crearInv) correos = [...new Set([...todosCorreosDoc, ...extras])];
     if (crearInv && !correos.length) throw new Error('Para enviar la invitación elegí al menos un docente con correo o escribí un correo.');
     const hayInvitacion = correos.length > 0;
 
@@ -3519,17 +3574,83 @@ window.convertirReservas = function(snapshot){
   } catch(e) { console.error(e); }
   return res;
 };
+/* ---------- Ventana "Detalle de la reserva" (todo lo cargado, completo) ---------- */
+const detalle = document.createElement('div');
+detalle.id = 'detalleReservaModal'; detalle.className = 'modal-overlay'; detalle.style.zIndex = '26000';
+detalle.innerHTML = '<div class="modal-box" style="width:95%;max-width:560px;max-height:90vh;overflow:auto;gap:12px">' +
+  '<div class="modal-header"><h3>📋 Detalle de la reserva</h3><button class="modal-close-btn" id="detalleCerrar" title="Cerrar">✕</button></div>' +
+  '<div id="detalleCuerpo" class="mj-detalle"></div>' +
+  '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="detalleEditar" style="background:#246c80">✏️ Modificar</button><button class="btn" id="detalleCerrar2">Cerrar</button></div></div>';
+document.body.appendChild(detalle);
+let detalleActual = null;
+const cerrarDetalle = () => { detalle.classList.remove('visible'); detalleActual = null; bloquearCreacionPorEdicion(); };
+document.getElementById('detalleCerrar').onclick = document.getElementById('detalleCerrar2').onclick = cerrarDetalle;
+detalle.addEventListener('click', e => { e.stopPropagation(); if (e.target === detalle) cerrarDetalle(); });
+document.getElementById('detalleEditar').onclick = () => {
+  const d = detalleActual; cerrarDetalle();
+  if (d) editEvent(d.fecha, d.laboratorio, d.id);
+};
+async function abrirDetalle(eventId){
+  bloquearCreacionPorEdicion();
+  const cuerpo = document.getElementById('detalleCuerpo');
+  cuerpo.textContent = 'Cargando...';
+  document.getElementById('detalleEditar').style.display = isAdmin ? '' : 'none';
+  detalle.classList.add('visible');
+  try {
+    const snap = await db.collection('reservas').doc(eventId).get();
+    if (!snap.exists) throw new Error('La reserva ya no existe.');
+    const r = snap.data();
+    detalleActual = {id: eventId, fecha: r.fecha, laboratorio: r.laboratorio};
+    const hora = x => x ? `${String(x.hour ?? 0).padStart(2,'0')}:${String(x.minute ?? 0).padStart(2,'0')}` : '';
+    const docentes = Array.isArray(r.docentes) && r.docentes.length
+      ? r.docentes.map(d => d.nombre + (d.email ? ' (' + d.email + ')' : '') + (d.uid ? '' : ' — externo'))
+      : (r.docenteNombre ? [r.docenteNombre + (r.docenteEmail ? ' (' + r.docenteEmail + ')' : '')] : []);
+    const filas = [
+      ['Actividad', r.titulo || ''],
+      ['Tipo de iniciativa', r.tipoIniciativa || 'Sin especificar'],
+      ['Fecha', /^\d{4}-\d{2}-\d{2}$/.test(r.fecha||'') ? r.fecha.split('-').reverse().join('/') : (r.fecha || '')],
+      ['Horario', hora(r.inicio) + ' a ' + hora(r.fin)],
+      ['Laboratorio', typeof nombreLabVisible === 'function' ? nombreLabVisible(r.laboratorio || '') : (r.laboratorio || '')],
+      ['Docentes', docentes.length ? docentes.join('\n') : 'Sin docente asignado'],
+      ['Observaciones', r.observaciones || '—'],
+      ['Invitación', r.googleEventId ? `Enviada (${(r.googleInvitados||[]).length} invitados)` : 'Sin invitación'],
+    ];
+    if (isAdmin) filas.push(['Creada por', r.creadoPorEmail || ''], ['Última modificación', r.modificadoPorEmail || '']);
+    cuerpo.replaceChildren();
+    filas.forEach(([k, v]) => {
+      const fila = document.createElement('div'); fila.className = 'mj-det-fila' + (k === 'Observaciones' ? ' mj-det-obs' : '');
+      const a = document.createElement('div'); a.className = 'mj-det-k'; a.textContent = k;
+      const b = document.createElement('div'); b.className = 'mj-det-v'; b.textContent = v;
+      fila.append(a, b); cuerpo.appendChild(fila);
+    });
+  } catch(e) { console.error(e); cuerpo.textContent = 'No se pudo cargar la reserva: ' + e.message; }
+}
+window.abrirDetalleReserva = abrirDetalle;
+const frenar = el => ['pointerdown','mousedown','mouseup','touchstart','touchend','dblclick'].forEach(t => el.addEventListener(t, e => e.stopPropagation()));
+
 const renderDiaOriginal = window.renderDayView;
 window.renderDayView = function(...args){
   const r = renderDiaOriginal.apply(this, args);
   try {
     document.querySelectorAll('#calendarTable .event-block[data-event-id]').forEach(block => {
       const ev = events?.[block.dataset.dateKey]?.[block.dataset.lab]?.[block.dataset.eventId];
-      if (!ev || !ev.observaciones || block.querySelector('.event-obs')) return;
-      const obs = document.createElement('div'); obs.className = 'event-obs';
-      obs.textContent = '📝 ' + ev.observaciones;
-      const destino = block.querySelector('.event-title') || block;
-      destino.appendChild(obs);
+      if (!ev) return;
+      // Botón 📋 en los controles de la reserva (aparece junto al lápiz, sobre, etc.)
+      const controles = block.querySelector('.edit-controls');
+      if (controles && !controles.querySelector('.mj-btn-detalle')) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'edit-btn mj-btn-detalle';
+        b.textContent = '📋'; b.title = 'Ver detalle completo de la reserva'; b.setAttribute('aria-label', b.title);
+        frenar(b); b.onclick = e => { e.stopPropagation(); abrirDetalle(ev.id); };
+        controles.appendChild(b);
+      }
+      // Observaciones: se ven completas si entran; si no, tocarlas abre el detalle
+      if (ev.observaciones && !block.querySelector('.event-obs')) {
+        const obs = document.createElement('button'); obs.type = 'button'; obs.className = 'event-obs';
+        obs.textContent = '📝 ' + ev.observaciones;
+        obs.title = ev.observaciones + '\n\n(Clic para ver el detalle completo)';
+        frenar(obs); obs.onclick = e => { e.stopPropagation(); abrirDetalle(ev.id); };
+        (block.querySelector('.event-title') || block).appendChild(obs);
+      }
     });
   } catch(e) { console.error(e); }
   return r;
@@ -3555,7 +3676,7 @@ window.obtenerDatosExportacion = async function(){
 
 })();
 </script>
-<!-- ===================== FIN MEJORAS v2 ===================== -->
+<!-- ===================== FIN MEJORAS v3 ===================== -->
 
 </body>
 </html>
