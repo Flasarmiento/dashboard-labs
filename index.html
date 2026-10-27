@@ -2954,9 +2954,11 @@ auth.onAuthStateChanged(async user => {
 })();
 </script>
 <!-- =====================================================================
-     MEJORAS v1 — Pegar este bloque completo JUSTO ANTES de </body>
-     (después del último </script>). No reemplaza ninguna línea existente.
-     Para revertir: borrar este bloque.
+     MEJORAS v2 — Bloque agregado al final (antes de </body>).
+     No reemplaza ninguna línea existente. Para revertir: borrar este bloque.
+     Incluye: encabezado fijo, pantalla compacta, varios docentes,
+     invitación automática, correos ocasionales al modificar,
+     tipo de iniciativa y observaciones.
      ===================================================================== -->
 <style>
 /* ---------- 1) Encabezado de laboratorios fijo al hacer scroll ---------- */
@@ -2981,6 +2983,13 @@ auth.onAuthStateChanged(async user => {
 #btnDisponibilidad{background:var(--ba-blue) !important;color:#fff !important}
 #btnCompactar{background:#e9eff2 !important;color:var(--ba-ink) !important}
 body.encabezado-oculto #institucionalHeader{display:none !important}
+
+/* ---------- Campos nuevos ---------- */
+.mj-caja{background:#eef7f1;border:1px solid #cfe6d6;padding:10px 12px;border-radius:8px;display:flex;flex-direction:column;gap:8px}
+.mj-caja textarea,.mj-obs{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:.9rem;resize:vertical}
+.mj-nota{font-size:.8rem;color:#4b6170;margin:0}
+.event-block .event-obs{font-size:.6rem;font-weight:500;line-height:1.2;margin-top:2px;opacity:.95;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal}
 </style>
 
 <script>
@@ -3010,8 +3019,49 @@ try { ocultoInicial = localStorage.getItem('encabezadoOculto') === '1'; } catch(
 aplicarEncabezado(ocultoInicial);
 btnComp.onclick = () => aplicarEncabezado(!document.body.classList.contains('encabezado-oculto'));
 
+/* =================== Tipo de iniciativa y observaciones ===================
+   Campos NUEVOS en la reserva: tipoIniciativa (texto) y observaciones (texto). */
+const TIPOS_INICIATIVA = [
+  'Curso de Verano','Curso Regular','Jornada / Taller / Masterclass','Capacitación Laboral (Oficios)',
+  'Ciclo con Aliado Estratégico','Vinculación con el Futuro','Emprendedorismo','Práctica Profesionalizante',
+  'Formación Docente','Recorrida (visita guiada)','Dispositivo de otra área de la Agencia','Dispositivo externo','Otro'
+];
+const MAX_OBS = 1000;
+
+function crearSelectorTipo(id){
+  const l = document.createElement('label'); l.textContent = 'Tipo de iniciativa';
+  const s = document.createElement('select'); s.id = id; s.style.cssText = 'display:block;width:100%;padding:9px;margin-top:5px';
+  const vacio = document.createElement('option'); vacio.value = ''; vacio.textContent = '— Elegir tipo de iniciativa —'; s.appendChild(vacio);
+  TIPOS_INICIATIVA.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; s.appendChild(o); });
+  l.appendChild(s); return l;
+}
+function fijarTipo(id, valor){
+  const s = document.getElementById(id);
+  [...s.querySelectorAll('option[data-anterior]')].forEach(o => o.remove());
+  if (valor && !TIPOS_INICIATIVA.includes(valor)) {     // valor guardado que ya no está en la lista
+    const o = document.createElement('option'); o.value = valor; o.textContent = valor; o.dataset.anterior = '1'; s.appendChild(o);
+  }
+  s.value = valor || '';
+}
+function crearObservaciones(id){
+  const l = document.createElement('label'); l.textContent = 'Observaciones';
+  const t = document.createElement('textarea'); t.id = id; t.rows = 3; t.maxLength = MAX_OBS; t.className = 'mj-obs';
+  t.placeholder = 'Particularidades del evento: necesitan café, SUM en disposición auditorio, etc. (opcional)';
+  t.style.marginTop = '5px'; l.appendChild(t); return l;
+}
+// Formulario de nueva reserva
+recEl('recTitulo').closest('label').after(crearSelectorTipo('recTipoIniciativa'));
+recEl('recTipo').closest('label').after(crearObservaciones('recObservaciones'));
+// Formulario de modificar reserva
+document.getElementById('editarTitulo').closest('label').after(crearSelectorTipo('editarTipoIniciativa'));
+const notaEditar = document.querySelector('#editarReservaModal .modal-box > p');
+if (notaEditar) {
+  notaEditar.before(crearObservaciones('editarObservaciones'));
+  notaEditar.textContent = 'La fecha permanece fija. Si la reserva ya tiene invitación de Google Calendar, los docentes que agregues y los correos que escribas abajo se suman a esa invitación.';
+}
+
 /* =================== 3) Varios docentes por reserva ===================
-   Campos NUEVOS en la reserva: docentes [{uid,nombre,email}], docentesUids [uid].
+   Campos NUEVOS: docentes [{uid,nombre,email}], docentesUids [uid].
    Se siguen guardando docenteUid/docenteEmail (primer docente) y docenteNombre
    (todos los nombres unidos con " / "), así todo lo existente sigue funcionando. */
 const MAX_DOCENTES = 3;
@@ -3120,30 +3170,54 @@ async function revisarDocentes(uids, fechas, inicio, fin, excluir=[]){
   return out;
 }
 
-/* =================== 4) Invitación automática de Google Calendar =================== */
-async function enviarInvitacion(reservaId, invitados){
+/* =================== 4) Invitaciones de Google Calendar =================== */
+async function llamarInvitacion(accion, reservaId, invitados){
   const token = await currentUser.getIdToken();
   const resp = await fetch('/api/calendar', {
     method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-    body: JSON.stringify({accion:'crear', reservaId, invitados})
+    body: JSON.stringify({accion, reservaId, invitados})
   });
   let res = {}; try { res = await resp.json(); } catch(e) {}
-  if (!resp.ok || !res.ok) throw new Error(res.error || 'No se pudo enviar la invitación');
+  if (!resp.ok || !res.ok) throw new Error(res.error || 'No se pudo procesar la invitación');
 }
 function leerCorreos(texto){
-  return String(texto||'').split(/[,;\n]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+  return [...new Set(String(texto||'').split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean))];
+}
+/* Envía o amplía la invitación de UNA reserva.
+   - Sin invitación: la crea con "correos" (solo si crearSiFalta).
+   - Con invitación enviada: suma "correos" a los invitados actuales (nunca quita a nadie).
+   Devuelve 'creada' | 'ampliada' | 'sin-cambios' | 'omitida'. */
+async function invitarReserva(reservaId, correos, crearSiFalta){
+  const snap = await db.collection('reservas').doc(reservaId).get();
+  if (!snap.exists) throw new Error('La reserva ya no existe.');
+  const r = snap.data();
+  if (r.googleInviteState === 'pending') throw new Error('hay un envío pendiente de verificación');
+  const nuevos = [...new Set((correos||[]).map(x => String(x).toLowerCase()).filter(x => EMAIL_OK.test(x)))];
+  if (r.googleEventId) {
+    if (r.googleInviteState !== 'sent') throw new Error('la invitación requiere verificación (usá el sobre ✉)');
+    const actuales = [...new Set((r.googleInvitados || []).map(x => String(x).toLowerCase()))];
+    const lista = [...new Set([...actuales, ...nuevos])];
+    if (lista.length === actuales.length) return 'sin-cambios';
+    if (lista.length > 50) throw new Error('máximo 50 destinatarios');
+    await llamarInvitacion('actualizar', reservaId, lista);
+    return 'ampliada';
+  }
+  if (!crearSiFalta || !nuevos.length) return 'omitida';
+  if (nuevos.length > 50) throw new Error('máximo 50 destinatarios');
+  await llamarInvitacion('crear', reservaId, nuevos);
+  return 'creada';
 }
 
 // Controles de invitación en el formulario de nueva reserva
 function asegurarControlesInvitacion(){
   if (document.getElementById('recEnviarInv')) return;
-  const caja = document.createElement('div');
-  caja.style.cssText = 'background:#eef7f1;border:1px solid #cfe6d6;padding:10px 12px;border-radius:8px;display:flex;flex-direction:column;gap:8px';
+  const caja = document.createElement('div'); caja.className = 'mj-caja';
   const l = document.createElement('label'); l.style.cssText='font-weight:600;cursor:pointer';
   const cb = document.createElement('input'); cb.type='checkbox'; cb.id='recEnviarInv'; cb.checked=true;
   l.append(cb, document.createTextNode(' ✉ Enviar invitación de Google Calendar a los docentes al guardar'));
   const ta = document.createElement('textarea'); ta.id='recInvExtra'; ta.rows=2;
-  ta.placeholder='Otros correos para invitar (opcional, separados por coma)'; ta.style.cssText='width:100%;padding:8px;border:1px solid #ccc;border-radius:6px';
+  ta.placeholder='Otros correos para invitar (opcional, separados por coma)';
+  ta.addEventListener('input', () => { if (ta.value.trim()) cb.checked = true; });
   caja.append(l, ta);
   recEl('recEstado').before(caja);
 }
@@ -3154,16 +3228,20 @@ window.recAbrir = function(...args){
   if (!recEl('recurrenteModal').classList.contains('visible')) return;
   asegurarControlesInvitacion();
   recEl('recEnviarInv').checked = true; recEl('recInvExtra').value = '';
+  fijarTipo('recTipoIniciativa', ''); recEl('recObservaciones').value = '';
   montarSelectores('recDocente', []).catch(e => console.error('Docentes:', e));
 };
 
-// Guardar nueva reserva (misma lógica original + varios docentes + invitación)
+// Guardar nueva reserva (misma lógica original + docentes + tipo + observaciones + invitación)
 async function recGuardarV2(){
   const boton = recEl('recGuardar'); if (boton.disabled) return;
   try {
     if (!isAdmin) throw new Error('Solo los administradores pueden reservar.');
     const titulo = recEl('recTitulo').value.trim(), lab = recEl('recLab').value;
     if (!titulo) throw new Error('Escribí el nombre de la actividad.');
+    const tipoIniciativa = recEl('recTipoIniciativa').value;
+    if (!tipoIniciativa) throw new Error('Elegí el tipo de iniciativa.');
+    const observaciones = recEl('recObservaciones').value.trim().slice(0, MAX_OBS);
     const inicio = recHora(recEl('recInicio').value), fin = recHora(recEl('recFin').value);
     if (recMin(inicio) < 480 || recMin(fin) > 1320 || recMin(inicio) >= recMin(fin)) throw new Error('El horario debe estar entre las 08:00 y las 22:00.');
     const fechas = recFechasElegidas();
@@ -3189,6 +3267,7 @@ async function recGuardarV2(){
     for (const fecha of fechas) {
       const ref = db.collection('reservas').doc(), mov = db.collection('movimientos').doc();
       const data = {fecha, laboratorio:lab, titulo, inicio, fin, color:colors[labs.indexOf(lab)],
+        tipoIniciativa, observaciones,
         creadoPor:currentUser.uid, creadoPorEmail:currentUser.email||'',
         modificadoPor:currentUser.uid, modificadoPorEmail:currentUser.email||'',
         createdAt:firebase.firestore.FieldValue.serverTimestamp(), updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
@@ -3203,7 +3282,7 @@ async function recGuardarV2(){
       const fallidas = [];
       for (let i = 0; i < creadas.length; i++) {
         recEl('recEstado').textContent = `Reservas guardadas. Enviando invitación ${i+1} de ${creadas.length}...`;
-        try { await enviarInvitacion(creadas[i].id, invitados); }
+        try { await llamarInvitacion('crear', creadas[i].id, invitados); }
         catch(e) { console.error(e); fallidas.push(creadas[i].fecha + ' (' + e.message + ')'); }
       }
       resumenInv = fallidas.length
@@ -3221,9 +3300,17 @@ async function recGuardarV2(){
 }
 recEl('recGuardar').onclick = recGuardarV2;
 
-// Modificaciones de series: verifica todos los docentes
+/* Modificaciones (una fecha o toda la serie).
+   Para reservas con invitación, al servidor de Google Calendar solo se le envían
+   los campos que ya conocía; los campos nuevos se guardan aparte en la base. */
+const CAMPOS_CALENDARIO = ['titulo','laboratorio','inicio','fin','docenteUid','docenteNombre','docenteEmail'];
+const igual = (a, b) => (a && typeof a === 'object' && 'hour' in a) || (b && typeof b === 'object' && 'hour' in b)
+  ? recMin(a||{hour:0,minute:0}) === recMin(b||{hour:0,minute:0})
+  : JSON.stringify(a ?? '') === JSON.stringify(b ?? '');
+let ultimasProcesadas = [];
 window.recAccionSerie = async function(eventId, accion, data){
   if (!isAdmin) return;
+  ultimasProcesadas = [];
   try {
     const ref = db.collection('reservas').doc(eventId), snap = await ref.get();
     if (!snap.exists) throw new Error('La reserva ya no existe.');
@@ -3251,10 +3338,18 @@ window.recAccionSerie = async function(eventId, accion, data){
     let procesadas = 0;
     for (const doc of docs) {
       const r = doc.data();
-      if (r.googleEventId) await calendarAccion(accion === 'eliminar' ? 'cancelar' : 'modificar', doc.id, accion === 'modificar' ? data : null);
-      else if (accion === 'eliminar') await eliminarReserva(doc.id);
-      else await actualizarReserva(doc.id, data);
-      procesadas++;
+      if (accion === 'eliminar') {
+        if (r.googleEventId) await calendarAccion('cancelar', doc.id, null);
+        else await eliminarReserva(doc.id);
+      } else if (r.googleEventId) {
+        const base = {}, resto = {};
+        Object.keys(data).forEach(k => { (CAMPOS_CALENDARIO.includes(k) ? base : resto)[k] = data[k]; });
+        if (Object.keys(base).some(k => !igual(base[k], r[k]))) await calendarAccion('modificar', doc.id, base);
+        if (Object.keys(resto).some(k => !igual(resto[k], r[k]))) await actualizarReserva(doc.id, resto);
+      } else {
+        await actualizarReserva(doc.id, data);
+      }
+      procesadas++; ultimasProcesadas.push(doc.id);
     }
     if (docs.length > 1) alert(`Operación completada: ${procesadas} de ${docs.length} reservas.`);
     return true;
@@ -3265,8 +3360,25 @@ window.recAccionSerie = async function(eventId, accion, data){
   }
 };
 
-// Editor de reservas con varios docentes + opción de enviar invitación
+/* ---------- Editor de reservas ---------- */
 let editarAnteriores = [];
+let editarUidsOriginales = [];
+function asegurarCajaInvitacionEditor(){
+  let caja = document.getElementById('editarInvCaja');
+  if (caja) return caja;
+  caja = document.createElement('div'); caja.id = 'editarInvCaja'; caja.className = 'mj-caja';
+  const info = document.createElement('p'); info.id = 'editarInvInfo'; info.className = 'mj-nota';
+  const l = document.createElement('label'); l.id = 'editarInvCheckLabel'; l.style.cssText = 'font-weight:600;cursor:pointer';
+  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'editarEnviarInv';
+  l.append(cb, document.createTextNode(' ✉ Enviar invitación de Google Calendar a los docentes de esta reserva'));
+  const ta = document.createElement('textarea'); ta.id = 'editarInvExtra'; ta.rows = 2;
+  ta.placeholder = 'Correos ocasionales para invitar (opcional, separados por coma)';
+  ta.addEventListener('input', () => { if (ta.value.trim() && l.style.display !== 'none') cb.checked = true; });
+  caja.append(info, l, ta);
+  document.getElementById('editarEstado').before(caja);
+  return caja;
+}
+
 window.editEvent = async function(dateKey, lab, eventId){
   if (!isAdmin) return;
   bloquearCreacionPorEdicion();
@@ -3279,26 +3391,38 @@ window.editEvent = async function(dateKey, lab, eventId){
     const r = snap.data();
     editarReservaId = eventId;
     editarAnteriores = anterioresDe(r);
+    editarUidsOriginales = uidsDe(r);
     document.getElementById('editarTitulo').value = r.titulo || '';
+    fijarTipo('editarTipoIniciativa', r.tipoIniciativa || '');
+    document.getElementById('editarObservaciones').value = r.observaciones || '';
     const selector = document.getElementById('editarLab'); selector.replaceChildren();
     labs.forEach(nombre => { const o=document.createElement('option'); o.value=nombre; o.textContent=nombre; selector.append(o); });
     selector.value = r.laboratorio;
-    await montarSelectores('editarDocente', uidsDe(r), editarAnteriores);
+    await montarSelectores('editarDocente', editarUidsOriginales, editarAnteriores);
     document.getElementById('editarFecha').value = r.fecha;
     const formato = t => `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')}`;
     document.getElementById('editarInicio').value = formato(r.inicio);
     document.getElementById('editarFin').value = formato(r.fin);
-    let caja = document.getElementById('editarInvCaja');
-    if (!caja) {
-      caja = document.createElement('label'); caja.id='editarInvCaja';
-      caja.style.cssText='background:#eef7f1;border:1px solid #cfe6d6;padding:10px 12px;border-radius:8px;font-weight:600;cursor:pointer';
-      const cb = document.createElement('input'); cb.type='checkbox'; cb.id='editarEnviarInv';
-      caja.append(cb, document.createTextNode(' ✉ Enviar invitación de Google Calendar a los docentes de esta reserva'));
-      estado.before(caja);
+    // Caja de invitación: siempre vacía (los correos ocasionales no se precargan)
+    const caja = asegurarCajaInvitacionEditor();
+    const info = document.getElementById('editarInvInfo'), checkL = document.getElementById('editarInvCheckLabel');
+    const ta = document.getElementById('editarInvExtra');
+    document.getElementById('editarEnviarInv').checked = false; ta.value = '';
+    caja.dataset.modo = '';
+    if (r.googleInviteState === 'pending') {
+      caja.dataset.modo = 'bloqueada'; checkL.style.display = 'none'; ta.style.display = 'none';
+      info.textContent = '⏳ Esta reserva tiene un envío de invitación pendiente de verificación. Revisá Google Calendar.';
+    } else if (r.googleEventId && r.googleInviteState !== 'sent') {
+      caja.dataset.modo = 'bloqueada'; checkL.style.display = 'none'; ta.style.display = 'none';
+      info.textContent = '⚠️ La invitación de esta reserva requiere verificación. Usá el sobre ✉ para revisarla.';
+    } else if (r.googleEventId) {
+      caja.dataset.modo = 'ampliar'; checkL.style.display = 'none'; ta.style.display = '';
+      const n = (r.googleInvitados || []).length;
+      info.textContent = `✉ Esta reserva ya tiene invitación (${n} invitado${n === 1 ? '' : 's'}). Escribí abajo correos ocasionales para sumarlos; los docentes que agregues también se suman.`;
+    } else {
+      caja.dataset.modo = 'crear'; checkL.style.display = ''; ta.style.display = '';
+      info.textContent = 'Esta reserva todavía no tiene invitación de Google Calendar.';
     }
-    const puedeEnviar = !r.googleEventId && r.googleInviteState !== 'pending';
-    caja.style.display = puedeEnviar ? 'block' : 'none';
-    document.getElementById('editarEnviarInv').checked = false;
     estado.textContent = '';
     document.getElementById('editarReservaModal').classList.add('visible');
   } catch(e) { console.error(e); alert('No se pudo abrir la reserva: ' + e.message); }
@@ -3308,26 +3432,45 @@ document.getElementById('editarGuardar').onclick = async () => {
   if (!editarReservaId) return;
   const id = editarReservaId;
   const btn = document.getElementById('editarGuardar'), estado = document.getElementById('editarEstado');
+  if (btn.disabled) return;
   try {
     const titulo = document.getElementById('editarTitulo').value.trim();
     const laboratorio = document.getElementById('editarLab').value;
     const inicio = recHora(document.getElementById('editarInicio').value);
     const fin = recHora(document.getElementById('editarFin').value);
+    const tipoIniciativa = document.getElementById('editarTipoIniciativa').value;
+    const observaciones = document.getElementById('editarObservaciones').value.trim().slice(0, MAX_OBS);
     if (!titulo) throw new Error('Ingresá el nombre de la actividad.');
+    if (!tipoIniciativa) throw new Error('Elegí el tipo de iniciativa.');
     if (recMin(inicio) < 480 || recMin(fin) > 1320 || recMin(inicio) >= recMin(fin)) throw new Error('El horario debe estar entre las 08:00 y las 22:00.');
+    const caja = document.getElementById('editarInvCaja'), modo = caja?.dataset.modo || '';
+    const extras = leerCorreos(document.getElementById('editarInvExtra')?.value);
+    const malos = extras.filter(x => !EMAIL_OK.test(x));
+    if (malos.length) throw new Error('Correos inválidos: ' + malos.join(', '));
+    const crearInv = modo === 'crear' && document.getElementById('editarEnviarInv').checked;
+
     const snap = await db.collection('reservas').doc(id).get();
     if (!snap.exists) throw new Error('La reserva ya no existe.');
     const actual = snap.data();
     const nuevos = leerUids('editarDocente');
     const cambiaDoc = nuevos.join('|') !== uidsDe(actual).join('|');
     const datosDoc = datosDocentes(nuevos, editarAnteriores);
-    const cambios = {titulo, laboratorio, inicio, fin};
+    const cambios = {titulo, laboratorio, inicio, fin, tipoIniciativa, observaciones};
     if (cambiaDoc) Object.assign(cambios, datosDoc);
-    const caja = document.getElementById('editarInvCaja');
-    const enviarInv = !!(caja && caja.style.display !== 'none' && document.getElementById('editarEnviarInv').checked);
     const sinCambios = actual.titulo === titulo && actual.laboratorio === laboratorio &&
-      recMin(actual.inicio) === recMin(inicio) && recMin(actual.fin) === recMin(fin) && !cambiaDoc;
-    if (sinCambios && !enviarInv) { cerrarEditor(); return; }
+      recMin(actual.inicio) === recMin(inicio) && recMin(actual.fin) === recMin(fin) && !cambiaDoc &&
+      (actual.tipoIniciativa || '') === tipoIniciativa && (actual.observaciones || '') === observaciones;
+
+    // Correos a sumar: docentes recién agregados (si ya hay invitación) o todos (si se crea) + ocasionales
+    const correosDoc = uids => datosDoc.docentes.filter(d => uids.includes(d.uid)).map(d => d.email).filter(e => EMAIL_OK.test(e));
+    const agregados = nuevos.filter(u => !editarUidsOriginales.includes(u));
+    let correos = [];
+    if (modo === 'ampliar') correos = [...new Set([...correosDoc(agregados), ...extras])];
+    else if (crearInv) correos = [...new Set([...correosDoc(nuevos), ...extras])];
+    if (crearInv && !correos.length) throw new Error('Para enviar la invitación elegí al menos un docente con correo o escribí un correo.');
+    const hayInvitacion = correos.length > 0;
+
+    if (sinCambios && !hayInvitacion) { cerrarEditor(); return; }
     btn.disabled = true;
     let ok = true;
     if (!sinCambios) {
@@ -3339,15 +3482,23 @@ document.getElementById('editarGuardar').onclick = async () => {
       if (chk.conteos.length && !confirm('Hay docentes con dos o más actividades ese día:\n' + chk.conteos.join('\n') + '\n¿Continuar?')) return;
       estado.textContent = 'Guardando y sincronizando con Google Calendar...';
       ok = await recAccionSerie(id, 'modificar', cambios);
+    } else {
+      ultimasProcesadas = [id];
     }
-    if (ok && enviarInv) {
-      const inv = datosDoc.docentes.map(d => d.email).filter(e => EMAIL_OK.test(e));
-      if (!inv.length) alert('Reserva guardada. No hay docentes con correo para invitar: usá el sobre ✉ para elegir destinatarios.');
-      else {
-        estado.textContent = 'Enviando invitación...';
-        try { await enviarInvitacion(id, inv); alert('Invitación enviada a ' + inv.length + ' docente(s).'); }
-        catch(e) { alert('La reserva se guardó, pero la invitación no se pudo confirmar: ' + e.message + '\nRevisá Google Calendar antes de reintentar con el sobre ✉.'); }
+    if (ok && hayInvitacion) {
+      const ids = ultimasProcesadas.length ? ultimasProcesadas : [id];
+      const resultado = {creada:0, ampliada:0, 'sin-cambios':0, omitida:0}, fallidas = [];
+      for (let i = 0; i < ids.length; i++) {
+        estado.textContent = `Procesando invitación ${i+1} de ${ids.length}...`;
+        try { resultado[await invitarReserva(ids[i], correos, crearInv)]++; }
+        catch(e) { console.error(e); fallidas.push(e.message); }
       }
+      const partes = [];
+      if (resultado.creada) partes.push(`✉ Invitación enviada (${resultado.creada} reserva${resultado.creada>1?'s':''}).`);
+      if (resultado.ampliada) partes.push(`✉ Se sumaron ${correos.length} correo(s) a la invitación (${resultado.ampliada} reserva${resultado.ampliada>1?'s':''}).`);
+      if (resultado['sin-cambios']) partes.push('Los correos indicados ya estaban invitados.');
+      if (fallidas.length) partes.push('⚠️ No se pudo confirmar la invitación en ' + fallidas.length + ' reserva(s): ' + [...new Set(fallidas)].join('; ') + '\nRevisá Google Calendar antes de reintentar con el sobre ✉.');
+      if (partes.length) alert('Reserva guardada.\n\n' + partes.join('\n'));
     }
     if (ok) { bloquearCreacionPorEdicion(); recEl('recurrenteModal').classList.remove('visible'); cerrarEditor(); }
     else estado.textContent = 'No se aplicaron todos los cambios. Revisá el calendario antes de reintentar.';
@@ -3355,9 +3506,56 @@ document.getElementById('editarGuardar').onclick = async () => {
   finally { btn.disabled = false; }
 };
 
+/* =================== Observaciones visibles en la grilla =================== */
+const convertirOriginal = window.convertirReservas;
+window.convertirReservas = function(snapshot){
+  const res = convertirOriginal(snapshot);
+  try {
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      const ev = res[d?.fecha]?.[d?.laboratorio]?.[doc.id];
+      if (ev) { ev.tipoIniciativa = d.tipoIniciativa || ''; ev.observaciones = d.observaciones || ''; }
+    });
+  } catch(e) { console.error(e); }
+  return res;
+};
+const renderDiaOriginal = window.renderDayView;
+window.renderDayView = function(...args){
+  const r = renderDiaOriginal.apply(this, args);
+  try {
+    document.querySelectorAll('#calendarTable .event-block[data-event-id]').forEach(block => {
+      const ev = events?.[block.dataset.dateKey]?.[block.dataset.lab]?.[block.dataset.eventId];
+      if (!ev || !ev.observaciones || block.querySelector('.event-obs')) return;
+      const obs = document.createElement('div'); obs.className = 'event-obs';
+      obs.textContent = '📝 ' + ev.observaciones;
+      const destino = block.querySelector('.event-title') || block;
+      destino.appendChild(obs);
+    });
+  } catch(e) { console.error(e); }
+  return r;
+};
+
+/* =================== Exportación Excel con columnas nuevas =================== */
+window.obtenerDatosExportacion = async function(){
+  if (!isAdmin || !currentUser) throw new Error('Solo los administradores pueden exportar.');
+  const periodo = periodoExportacion();
+  const snap = await db.collection('reservas').where('fecha','>=',periodo.desde).where('fecha','<',periodo.hasta).get();
+  const filas = [];
+  snap.forEach(doc => {
+    const r = doc.data();
+    if (periodo.lab && r.laboratorio !== periodo.lab) return;
+    const hora = x => x ? `${String(x.hour ?? 0).padStart(2,'0')}:${String(x.minute ?? 0).padStart(2,'0')}` : '';
+    filas.push({Fecha:r.fecha||'', Laboratorio:nombreLabVisible(r.laboratorio||''), Actividad:r.titulo||'',
+      Inicio:hora(r.inicio), Fin:hora(r.fin), Docente:r.docenteNombre||'Sin asignar',
+      'Tipo de iniciativa': r.tipoIniciativa || 'Sin especificar', Observaciones: r.observaciones || ''});
+  });
+  filas.sort((a,b) => a.Fecha.localeCompare(b.Fecha) || a.Inicio.localeCompare(b.Inicio) || a.Laboratorio.localeCompare(b.Laboratorio));
+  return {filas, periodo};
+};
+
 })();
 </script>
-<!-- ===================== FIN MEJORAS v1 ===================== -->
+<!-- ===================== FIN MEJORAS v2 ===================== -->
 
 </body>
 </html>
