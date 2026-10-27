@@ -2954,7 +2954,7 @@ auth.onAuthStateChanged(async user => {
 })();
 </script>
 <!-- =====================================================================
-     MEJORAS v4 — Bloque agregado al final (antes de </body>).
+     MEJORAS v5 — Bloque agregado al final (antes de </body>).
      No reemplaza ninguna línea existente. Para revertir: borrar este bloque.
      Incluye: encabezado fijo, pantalla compacta, varios docentes,
      invitación automática, correos ocasionales al modificar,
@@ -3676,7 +3676,7 @@ window.obtenerDatosExportacion = async function(){
 
 })();
 </script>
-<!-- ===================== FIN MEJORAS v4 ===================== -->
+<!-- ===================== FIN MEJORAS v5 ===================== -->
 
 <!-- ===================== PENDIENTES / AVISOS (Etapa 1) =====================
      Colección NUEVA en Firestore: "pendientes". No modifica reservas ni usuarios.
@@ -3706,6 +3706,12 @@ window.obtenerDatosExportacion = async function(){
 .mj-pn-meta{font-size:.78rem;color:#56707f;margin-top:6px;line-height:1.45}
 .mj-pn-acc{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .mj-pn-acc .btn{padding:5px 10px;font-size:.76rem}
+.mj-pn-hilo{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.mj-pn-resp{background:#eef4f8;border-radius:8px;padding:7px 10px;font-size:.86rem;border-left:3px solid #246c80}
+.mj-pn-resp.creador{background:#f3f0fa;border-left-color:#6a4fa3}
+.mj-pn-resp-q{font-size:.74rem;font-weight:700;color:#3d5566;margin-bottom:2px}
+.mj-pn-responder{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.mj-pn-responder textarea{width:100%;padding:8px;border:1px solid #bbb;border-radius:6px;font:inherit;font-size:.9rem;resize:vertical}
 .mj-pn-form{background:#f5f8fa;border:1px solid #d9e4ea;border-radius:10px;padding:12px;display:none;flex-direction:column;gap:10px}
 .mj-pn-form.visible{display:flex}
 .mj-pn-form textarea,.mj-pn-form input,.mj-pn-form select{width:100%;padding:8px;border:1px solid #bbb;border-radius:6px;font:inherit;font-size:.9rem}
@@ -3961,21 +3967,60 @@ function tarjeta(p){
   if (esMio(p)) top.append(el('span', {className:'mj-chip', textContent:'Para vos', style:'background:#dbeefe'}));
   const para = (p.destinatariosInfo && p.destinatariosInfo.length ? p.destinatariosInfo.map(d => d.nombre || d.email) : (p.destinatarios || []).map(nombreDe)).join(', ');
   const meta = el('div', {className:'mj-pn-meta'});
-  meta.append(el('div', {textContent:'Para: ' + para}));
+  meta.append(el('div', {textContent:'Para: ' + para, title:(p.destinatarios || []).join(', ')}));
   const creado = fMomento(p.createdAt), resuelto = fMomento(p.resueltoAt);
   meta.append(el('div', {textContent:`De: ${p.creadoPorNombre || p.creadoPorEmail || ''}${creado ? ' · ' + creado : ''}`}));
+  const faltan = faltanAvisar(p);
+  if (p.estado !== 'resuelto' && (p.destinatarios || []).length) meta.append(el('div', faltan.length
+    ? {textContent:'⚠️ Aviso por email pendiente para: ' + faltan.map(nombreDe).join(', '), style:'color:#b26a00;font-weight:600'}
+    : {textContent:'✉ Avisado por email', style:'color:#2e7d32'}));
   if (p.estado === 'resuelto') meta.append(el('div', {textContent:`✓ Resuelto por ${p.resueltoNombre || p.resueltoPorEmail || ''}${resuelto ? ' el ' + resuelto : ''}${p.notaResolucion ? ' — ' + p.notaResolucion : ''}`, style:'color:#2e7d32;font-weight:600'}));
   const acc = el('div', {className:'mj-pn-acc'});
   const boton = (texto, color, fn, titulo='') => { const b = el('button', {className:'btn', type:'button', textContent:texto, title:titulo}); if (color) b.style.background = color; b.onclick = fn; acc.append(b); };
   if (p.estado !== 'resuelto' && puedeResolver(p)) boton('✓ Marcar resuelto', '#2e7d32', () => resolver(p));
   if (p.estado === 'resuelto' && puedeResolver(p)) boton('↺ Reabrir', '#5b6b78', () => reabrir(p));
+  if (puedeResolver(p)) boton('💬 Responder', '#246c80', () => mostrarRespuesta(card, p), 'Escribir una respuesta o descargo; le llega por email a quien corresponda');
   if (soyAdmin) {
-    boton('✉ Avisar por email', '#246c80', () => abrirMail(p), 'Abre tu correo con el aviso ya escrito');
+    if (p.estado !== 'resuelto' && faltan.length) boton('✉ Reintentar aviso', '#b26a00', () => notificar(p.id, faltan, true), 'El aviso automático no llegó a enviarse');
     if (p.estado !== 'resuelto') boton('✏️ Editar', '', () => mostrarForm(p));
     boton('🗑', '#9b2c2c', () => borrar(p), 'Eliminar pendiente');
   }
-  card.append(top, el('div', {className:'mj-pn-texto', textContent:p.texto}), meta, acc);
+  card.append(top, el('div', {className:'mj-pn-texto', textContent:p.texto}), meta);
+  const resp = (p.respuestas || []).slice().sort((a, b) => (a.fecha?.seconds || 0) - (b.fecha?.seconds || 0));
+  if (resp.length) {
+    const hilo = el('div', {className:'mj-pn-hilo'});
+    resp.forEach(r => {
+      const cuando = fMomento(r.fecha);
+      hilo.append(el('div', {className:'mj-pn-resp' + (r.autorUid === p.creadoPor ? ' creador' : '')},
+        el('div', {className:'mj-pn-resp-q', textContent:`💬 ${r.autorNombre || r.autorEmail || ''}${cuando ? ' · ' + cuando : ''}`}),
+        el('div', {textContent:r.texto, style:'white-space:pre-wrap;word-break:break-word'})));
+    });
+    card.append(hilo);
+  }
+  card.append(acc);
   return card;
+}
+function mostrarRespuesta(card, p){
+  if (card.querySelector('.mj-pn-responder')) { card.querySelector('.mj-pn-responder textarea').focus(); return; }
+  const destino = p.creadoPor === miUid ? 'a las personas asignadas' : 'a ' + (p.creadoPorNombre || 'quien lo creó');
+  const ta = el('textarea', {rows:3, maxLength:2000, placeholder:'Escribí tu respuesta o descargo. Le llega por email ' + destino + '.'});
+  const estado = el('div', {style:'font-size:.8rem;color:#b71c1c;white-space:pre-wrap'});
+  const enviarB = el('button', {className:'btn', type:'button', textContent:'Enviar respuesta'}); enviarB.style.background = '#21855c';
+  const cancelar = el('button', {className:'btn', type:'button', textContent:'Cancelar'});
+  const caja = el('div', {className:'mj-pn-responder'}, ta, estado, el('div', {style:'display:flex;gap:6px;justify-content:flex-end'}, cancelar, enviarB));
+  cancelar.onclick = () => caja.remove();
+  enviarB.onclick = async () => {
+    const texto = ta.value.trim();
+    if (!texto) { estado.textContent = 'Escribí la respuesta.'; return; }
+    enviarB.disabled = true; estado.style.color = '#56707f'; estado.textContent = 'Enviando...';
+    try {
+      const r = await llamarApi('responder', {pendienteId:p.id, texto});
+      caja.remove();
+      $('pnEstado').textContent = r.avisoError ? 'Respuesta guardada, pero no se pudo enviar el email: ' + r.avisoError : (r.avisados ? '💬 Respuesta enviada por email ' + destino + '.' : '💬 Respuesta guardada.');
+      if (filtro === 'resueltos') { await cargarResueltos(); pintarLista(); }
+    } catch(e) { estado.style.color = '#b71c1c'; estado.textContent = 'No se pudo enviar: ' + e.message; enviarB.disabled = false; }
+  };
+  card.append(caja); ta.focus();
 }
 
 /* ---------- Acciones ---------- */
@@ -3988,6 +4033,7 @@ async function resolver(p){
       resueltoAt: firebase.firestore.FieldValue.serverTimestamp(), notaResolucion: nota.trim().slice(0, 500),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    if (p.creadoPor !== miUid) llamarApi('resuelto', {pendienteId:p.id}).catch(e => console.error('Aviso de resuelto:', e));
     if (filtro === 'resueltos') { await cargarResueltos(); pintarLista(); }
   } catch(e) { console.error(e); alert('No se pudo marcar como resuelto: ' + e.message); }
 }
@@ -4008,14 +4054,26 @@ async function borrar(p){
   try { await db.collection('pendientes').doc(p.id).delete(); resueltos = resueltos.filter(x => x.id !== p.id); pintarLista(); }
   catch(e) { console.error(e); alert('No se pudo eliminar: ' + e.message); }
 }
-function abrirMail(p){
-  const resumen = p.texto.replace(/\s+/g, ' ').slice(0, 70);
-  const lineas = [p.texto, ''];
-  if (p.vence) lineas.push('Vence: ' + fFecha(p.vence));
-  if (p.laboratorio) lineas.push('Espacio: ' + labVisible(p.laboratorio));
-  lineas.push('', 'Registrado en el sistema del Centro de Simulación (botón 📌 Pendientes), donde podés marcarlo como resuelto.');
-  const url = 'mailto:' + (p.destinatarios || []).join(',') + '?subject=' + encodeURIComponent('Pendiente: ' + resumen) + '&body=' + encodeURIComponent(lineas.join('\n'));
-  const a = el('a', {href:url}); document.body.append(a); a.click(); a.remove();
+async function llamarApi(accion, datos){
+  const token = await auth.currentUser.getIdToken();
+  const r = await fetch('/api/pendientes', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer ' + token},
+    body: JSON.stringify({accion, ...datos})});
+  let out = {}; try { out = await r.json(); } catch(e) {}
+  if (!r.ok || !out.ok) throw new Error(out.error || 'No se pudo comunicar con el servidor (' + r.status + ')');
+  return out;
+}
+const faltanAvisar = p => (p.destinatarios || []).filter(e => !(p.avisoEnviadoA || []).includes(e));
+async function notificar(id, correos, manual=false){
+  $('pnEstado').textContent = '✉ Enviando aviso por email...';
+  try {
+    const r = await llamarApi('notificar', {pendienteId:id, correos});
+    const err = (r.errores || []).length ? '\n⚠️ No se pudo enviar a: ' + r.errores.join('; ') : '';
+    $('pnEstado').textContent = (r.enviados ? `✉ Aviso enviado por email a ${r.enviados} persona(s).` : '') + err;
+    if (manual && filtro === 'resueltos') { await cargarResueltos(); pintarLista(); }
+  } catch(e) {
+    console.error(e);
+    $('pnEstado').textContent = '⚠️ El pendiente quedó guardado, pero no se pudo enviar el aviso por email: ' + e.message;
+  }
 }
 
 /* ---------- Formulario (solo admins) ---------- */
@@ -4071,18 +4129,21 @@ $('pnGuardar').onclick = async () => {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     b.disabled = true;
-    const nuevo = !editandoId;
+    const nuevo = !editandoId, idEdit = editandoId;
+    const previos = nuevo ? [] : ((abiertos.find(x => x.id === idEdit) || {}).destinatarios || []);
+    let id = idEdit;
     if (nuevo) {
-      await db.collection('pendientes').add({...datos, estado:'abierto', creadoPor:miUid, creadoPorEmail:miEmail, creadoPorNombre:miNombre,
+      const ref = await db.collection('pendientes').add({...datos, estado:'abierto', creadoPor:miUid, creadoPorEmail:miEmail, creadoPorNombre:miNombre,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+      id = ref.id;
     } else {
-      await db.collection('pendientes').doc(editandoId).update(datos);
+      await db.collection('pendientes').doc(idEdit).update(datos);
     }
     ocultarForm();
-    if (enTexto.some(x => !marcados.includes(x) && !otros.includes(x))) $('pnEstado').textContent = 'Se agregaron como destinatarios los correos escritos en el texto.';
-    if (nuevo && confirm('Pendiente guardado.\n\n¿Querés avisarles ahora por email? (se abre tu correo con el mensaje ya escrito)')) {
-      abrirMail({texto: datos.texto, vence: datos.vence, laboratorio: datos.laboratorio, destinatarios: dest});
-    }
+    const avisar = dest.filter(e => !previos.includes(e));
+    const agregadosTexto = enTexto.some(x => !marcados.includes(x) && !otros.includes(x));
+    if (avisar.length) await notificar(id, avisar); else $('pnEstado').textContent = '';
+    if (agregadosTexto) $('pnEstado').textContent += ($('pnEstado').textContent ? '\n' : '') + 'Se agregaron como destinatarios los correos escritos en el texto.';
   } catch(e) { console.error(e); est.textContent = 'Error: ' + e.message; }
   finally { b.disabled = false; }
 };
