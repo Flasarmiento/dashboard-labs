@@ -4175,6 +4175,345 @@ $('pnMinuta').onclick = () => {
 })();
 </script>
 <!-- ===================== FIN PENDIENTES ===================== -->
+<!-- ===================== BLOQUEOS Y FERIADOS =====================
+     Pegar este bloque completo justo antes de </body> (después de PENDIENTES).
+     Colección NUEVA en Firestore: "bloqueos". No modifica reservas existentes.
+     Requiere agregar la regla "match /bloqueos/{id}" en Firestore.
+     Para revertir: borrar este bloque.                                      -->
+<style>
+#btnBloqueos{background:#7a2e2e !important;color:#fff !important}
+.mj-bloqueo{position:absolute;left:0;right:0;top:0;z-index:4;pointer-events:none;overflow:hidden;
+  background:repeating-linear-gradient(45deg,rgba(120,120,120,.30) 0 8px,rgba(120,120,120,.14) 8px 16px);
+  border:1px solid rgba(122,46,46,.45);color:#5a1f1f;font-size:.6rem;font-weight:800;line-height:1.2;
+  padding:3px 2px;text-align:center;word-break:break-word}
+.mj-bloqueo.feriado{background:repeating-linear-gradient(45deg,rgba(198,40,40,.22) 0 8px,rgba(198,40,40,.10) 8px 16px)}
+#bloqueosModal .modal-box{width:96%;max-width:820px;max-height:92vh;overflow:auto;gap:12px}
+.mj-bq-form{background:#f5f8fa;border:1px solid #d9e4ea;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.mj-bq-form input,.mj-bq-form select,.mj-bq-form textarea{padding:8px;border:1px solid #bbb;border-radius:6px;font:inherit;font-size:.9rem}
+.mj-bq-fila{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.mj-bq-labs{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.84rem;max-height:120px;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px 8px}
+.mj-bq-item{display:flex;gap:10px;align-items:center;border:1px solid #e1e8ec;border-left:5px solid #7a2e2e;border-radius:8px;padding:8px 10px;background:#fff}
+.mj-bq-item.feriado{border-left-color:#c62828}
+.mj-bq-item.pasado{opacity:.55}
+.mj-bq-item .mj-bq-txt{flex:1;font-size:.88rem}
+.mj-bq-item small{color:#56707f}
+</style>
+
+<script>
+(function(){
+'use strict';
+const ZONA = 'America/Argentina/Buenos_Aires';
+const hoyKey = () => new Date().toLocaleDateString('en-CA', {timeZone: ZONA});
+const fFecha = k => /^\d{4}-\d{2}-\d{2}$/.test(k||'') ? k.split('-').reverse().join('/') : k;
+const hhmm = t => `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')}`;
+const minDe = t => t.hour * 60 + (t.minute || 0);
+const el = (tag, props={}, ...hijos) => { const e = document.createElement(tag); Object.assign(e, props); hijos.flat().forEach(h => h != null && e.append(h)); return e; };
+const DIA_COMPLETO = {inicio:{hour:8,minute:0}, fin:{hour:22,minute:0}};
+
+let bloqueos = [], cargado = false, desuscribir = null, soyAdmin = false, verPasados = false;
+
+/* ---------- Lógica de choque ---------- */
+function rangoDe(b){ return b.todoElDia ? DIA_COMPLETO : {inicio:b.inicio, fin:b.fin}; }
+function aplicaALab(b, lab){ return !Array.isArray(b.laboratorios) || !b.laboratorios.length || b.laboratorios.includes(lab); }
+function bloqueosQueChocan(fecha, lab, inicio, fin){
+  return bloqueos.filter(b => {
+    if (b.fecha !== fecha || !aplicaALab(b, lab)) return false;
+    if (b.todoElDia) return true;
+    const r = rangoDe(b);
+    return minDe(inicio) < minDe(r.fin) && minDe(fin) > minDe(r.inicio);
+  });
+}
+function descripcion(b){
+  return `${b.tipo === 'feriado' ? 'Feriado' : 'Bloqueado'}: ${b.motivo || ''}` + (b.todoElDia ? ' (todo el día)' : ` (${hhmm(b.inicio)} a ${hhmm(b.fin)})`);
+}
+async function asegurarBloqueos(){
+  if (cargado) return;
+  const snap = await db.collection('bloqueos').get();
+  bloqueos = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  cargado = true;
+}
+
+/* ---------- 1) Impedir reservas en días/horarios bloqueados ---------- */
+// Se valida al guardar (nueva, serie, edición y traslado entre laboratorios)
+const comprobarOriginal = window.recComprobarFechas;
+window.recComprobarFechas = async function(fechas, lab, inicio, fin, excluir=[]){
+  await asegurarBloqueos();
+  const choques = [];
+  (fechas || []).forEach(f => bloqueosQueChocan(f, lab, inicio, fin).forEach(b => choques.push(`${fFecha(f)} — ${descripcion(b)}`)));
+  if (choques.length) throw new Error('No se puede reservar en días u horarios bloqueados:\n' + choques.join('\n'));
+  return comprobarOriginal.call(this, fechas, lab, inicio, fin, excluir);
+};
+// Aviso inmediato al hacer clic sobre una franja bloqueada
+const recAbrirPrevio = window.recAbrir;
+window.recAbrir = function(fecha, lab, titulo, sh, sm, eh, em, ...resto){
+  const choques = bloqueosQueChocan(fecha, lab, {hour:+sh, minute:+sm}, {hour:+eh, minute:+em});
+  if (choques.length) { alert('🚫 ' + fFecha(fecha) + '\n' + choques.map(descripcion).join('\n') + '\n\nNo se pueden cargar reservas en esa franja.'); return; }
+  return recAbrirPrevio.call(this, fecha, lab, titulo, sh, sm, eh, em, ...resto);
+};
+
+/* ---------- 2) Mostrar los bloqueos en la grilla diaria ---------- */
+function pintarBloqueosDia(){
+  let fecha; try { fecha = getCurrentDateKey(); } catch(e) { return; }
+  const delDia = bloqueos.filter(b => b.fecha === fecha);
+  if (!delDia.length) return;
+  labs.forEach(lab => {
+    delDia.filter(b => aplicaALab(b, lab)).forEach(b => {
+      const r = rangoDe(b);
+      const ini = Math.max(480, minDe(r.inicio)), fin = Math.min(1320, minDe(r.fin));
+      if (fin <= ini) return;
+      const inicioSlot = ini - (ini % 30);
+      const celda = document.querySelector(`#calendarTable td[data-lab="${CSS.escape(lab)}"][data-hour="${Math.floor(inicioSlot/60)}"][data-half="${inicioSlot % 60}"]`);
+      if (!celda) return;
+      const slots = Math.ceil((fin - inicioSlot) / 30);
+      const div = el('div', {className:'mj-bloqueo' + (b.tipo === 'feriado' ? ' feriado' : ''),
+        textContent:'🚫 ' + (b.motivo || (b.tipo === 'feriado' ? 'Feriado' : 'Bloqueado')), title: descripcion(b)});
+      div.style.height = `calc(${slots * 100}% - 2px)`;
+      celda.appendChild(div);
+    });
+  });
+}
+const renderDiaPrevio = window.renderDayView;
+window.renderDayView = function(...a){ const r = renderDiaPrevio.apply(this, a); try { pintarBloqueosDia(); } catch(e) { console.error(e); } return r; };
+
+/* ---------- 3) Mostrar en vista semanal y mensual (sombreado de fondo) ---------- */
+function eventosFondo(soloLab){
+  return bloqueos.filter(b => !soloLab || aplicaALab(b, soloLab)).map(b => {
+    const r = rangoDe(b);
+    return {start:`${b.fecha}T${hhmm(r.inicio)}:00`, end:`${b.fecha}T${hhmm(r.fin)}:00`,
+      display:'background', color: b.tipo === 'feriado' ? '#e57373' : '#9e9e9e', title:'🚫 ' + (b.motivo || '')};
+  });
+}
+function aplicarFondo(cal, soloLab){
+  if (!cal) return;
+  try { const viejo = cal.getEventSourceById('mjBloqueos'); if (viejo) viejo.remove();
+        cal.addEventSource({id:'mjBloqueos', events: eventosFondo(soloLab)}); } catch(e) { console.error(e); }
+}
+let labMensual = null;
+const renderSemanaPrevio = window.renderWeekView;
+window.renderWeekView = function(...a){ const r = renderSemanaPrevio.apply(this, a); try { aplicarFondo(weekCalendar); } catch(e) {} return r; };
+const abrirMesPrevio = window.openModalLab;
+window.openModalLab = function(lab, ...a){ labMensual = lab; const r = abrirMesPrevio.call(this, lab, ...a); try { aplicarFondo(monthCalendar, lab); } catch(e) {} return r; };
+
+function refrescarVistas(){
+  if (!window._uiBuilt || !currentUser) return;
+  try { if (currentView === 'diario') renderDayView(); else renderWeekView(); } catch(e) {}
+  if (document.getElementById('modal').classList.contains('visible')) aplicarFondo(monthCalendar, labMensual);
+  if (document.getElementById('bloqueosModal').classList.contains('visible')) pintarLista();
+}
+
+/* ---------- 4) Panel de administración ---------- */
+const btn = el('button', {id:'btnBloqueos', className:'btn', type:'button', textContent:'🚫 Bloqueos', title:'Feriados, fumigaciones y otros bloqueos de todos los laboratorios'});
+btn.style.display = 'none';
+(document.getElementById('btnPendientes') || document.getElementById('btnLogout')).before(btn);
+
+const modal = el('div', {id:'bloqueosModal', className:'modal-overlay'});
+modal.style.zIndex = '25600';
+modal.innerHTML = `
+<div class="modal-box">
+  <div class="modal-header"><h3>🚫 Bloqueos y feriados</h3><button class="modal-close-btn" id="bqCerrar" title="Cerrar">✕</button></div>
+  <div class="mj-bq-form">
+    <b>Nuevo bloqueo</b>
+    <div class="mj-bq-fila">
+      <label>Tipo<br><select id="bqTipo"><option value="bloqueo">Bloqueo (fumigación, evento, etc.)</option><option value="feriado">Feriado / día no laborable</option></select></label>
+      <label>Fecha<br><input type="date" id="bqFecha"></label>
+      <label style="align-self:center;cursor:pointer"><input type="checkbox" id="bqTodoDia"> Todo el día</label>
+      <label>Desde<br><input type="time" id="bqDesde" step="1800" value="17:00"></label>
+      <label>Hasta<br><input type="time" id="bqHasta" step="1800" value="22:00"></label>
+    </div>
+    <label>Motivo (se muestra en la grilla)<br><input id="bqMotivo" maxlength="120" placeholder="Ej.: Fumigación" style="width:100%"></label>
+    <div>
+      <label style="cursor:pointer;font-weight:600"><input type="checkbox" id="bqTodosLabs" checked> Todos los laboratorios</label>
+      <div class="mj-bq-labs" id="bqLabs" style="display:none;margin-top:6px"></div>
+    </div>
+    <details>
+      <summary style="cursor:pointer;font-weight:600">📋 Cargar varias fechas a la vez (ej. lista de feriados)</summary>
+      <p style="font-size:.8rem;color:#4b6170;margin:6px 0">Una fecha por renglón. Formatos: <code>dd/mm/aaaa Motivo</code> (todo el día) o <code>dd/mm/aaaa 17:00-22:00 Motivo</code>. Se usan el tipo y los laboratorios elegidos arriba. Si un renglón no tiene motivo, se usa el del campo Motivo.</p>
+      <textarea id="bqLista" rows="6" style="width:100%" placeholder="24/11/2026 Día de la Soberanía Nacional&#10;08/12/2026 Inmaculada Concepción&#10;27/11/2026 17:00-22:00 Fumigación"></textarea>
+      <div class="mj-bq-fila" style="margin-top:6px">
+        <label>Año<br><input type="number" id="bqAnio" min="2024" max="2035" style="width:90px"></label>
+        <button class="btn" type="button" id="bqImportar" style="background:#246c80">⬇ Traer feriados nacionales</button>
+      </div>
+    </details>
+    <div id="bqEstado" style="font-size:.85rem;white-space:pre-wrap;color:#153244"></div>
+    <div style="display:flex;justify-content:flex-end"><button class="btn" type="button" id="bqGuardar" style="background:#21855c">Guardar bloqueo(s)</button></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+    <b>Bloqueos cargados</b>
+    <label style="font-size:.84rem;cursor:pointer"><input type="checkbox" id="bqPasados"> Mostrar fechas pasadas</label>
+  </div>
+  <div id="bqLista2" style="display:flex;flex-direction:column;gap:8px"></div>
+</div>`;
+document.body.appendChild(modal);
+const $ = id => document.getElementById(id);
+['mousedown','mouseup','pointerdown','click'].forEach(t => modal.addEventListener(t, e => e.stopPropagation()));
+modal.addEventListener('click', e => { if (e.target === modal) cerrar(); });
+function cerrar(){ modal.classList.remove('visible'); try { bloquearCreacionPorEdicion(); } catch(e) {} }
+$('bqCerrar').onclick = cerrar;
+
+$('bqLabs').append(...labs.map(l => el('label', {style:'cursor:pointer'},
+  el('input', {type:'checkbox', value:l, className:'bqLab'}), ' ' + (typeof nombreLabVisible === 'function' ? nombreLabVisible(l) : l))));
+$('bqTodosLabs').onchange = () => { $('bqLabs').style.display = $('bqTodosLabs').checked ? 'none' : 'flex'; };
+const sincronizarHorario = () => { const d = $('bqTodoDia').checked; $('bqDesde').disabled = $('bqHasta').disabled = d; };
+$('bqTodoDia').onchange = sincronizarHorario;
+$('bqTipo').onchange = () => { if ($('bqTipo').value === 'feriado') { $('bqTodoDia').checked = true; sincronizarHorario(); if (!$('bqMotivo').value) $('bqMotivo').value = 'Feriado'; } };
+$('bqPasados').onchange = () => { verPasados = $('bqPasados').checked; pintarLista(); };
+
+btn.onclick = () => {
+  $('bqFecha').value = (typeof getCurrentDateKey === 'function') ? getCurrentDateKey() : hoyKey();
+  $('bqAnio').value = new Date().getFullYear() + (new Date().getMonth() >= 9 ? 1 : 0);
+  $('bqEstado').textContent = '';
+  sincronizarHorario();
+  modal.classList.add('visible');
+  pintarLista();
+};
+
+function pintarLista(){
+  const cont = $('bqLista2'); cont.replaceChildren();
+  const hoy = hoyKey();
+  const lista = bloqueos.filter(b => verPasados || b.fecha >= hoy).sort((a, b) => a.fecha.localeCompare(b.fecha) || minDe(rangoDe(a).inicio) - minDe(rangoDe(b).inicio));
+  if (!lista.length) { cont.append(el('p', {textContent:'No hay bloqueos cargados.', style:'color:#56707f'})); return; }
+  lista.forEach(b => {
+    const dia = new Date(b.fecha + 'T12:00:00').toLocaleDateString('es-AR', {weekday:'long'});
+    const labsTxt = (b.laboratorios && b.laboratorios.length) ? b.laboratorios.join(', ') : 'Todos los laboratorios';
+    const borrar = el('button', {className:'btn', type:'button', textContent:'🗑', title:'Eliminar bloqueo'});
+    borrar.style.background = '#9b2c2c';
+    borrar.onclick = async () => {
+      if (!confirm(`¿Eliminar el bloqueo del ${fFecha(b.fecha)}?\n${descripcion(b)}`)) return;
+      try { await db.collection('bloqueos').doc(b.id).delete(); } catch(e) { alert('No se pudo eliminar: ' + e.message); }
+    };
+    cont.append(el('div', {className:'mj-bq-item' + (b.tipo === 'feriado' ? ' feriado' : '') + (b.fecha < hoy ? ' pasado' : '')},
+      el('div', {className:'mj-bq-txt'},
+        el('div', {}, el('b', {textContent:`${fFecha(b.fecha)} (${dia})`}), ' — ' + descripcion(b)),
+        el('small', {textContent: labsTxt})),
+      borrar));
+  });
+}
+
+/* Interpretar fechas: formulario y/o lista */
+function leerHora(v){ const m = /^(\d{1,2}):(\d{2})$/.exec(v || ''); if (!m || +m[1] > 23 || +m[2] > 59) return null; return {hour:+m[1], minute:+m[2]}; }
+function fechaValida(k){ const d = new Date(k + 'T12:00:00'); return /^\d{4}-\d{2}-\d{2}$/.test(k) && !isNaN(d) && d.toLocaleDateString('en-CA') === k; }
+function armarBloqueos(){
+  const tipo = $('bqTipo').value, motivoBase = $('bqMotivo').value.trim().slice(0, 120);
+  let laboratorios = [];
+  if (!$('bqTodosLabs').checked) {
+    laboratorios = [...document.querySelectorAll('.bqLab:checked')].map(x => x.value);
+    if (!laboratorios.length) throw new Error('Elegí al menos un laboratorio o marcá "Todos los laboratorios".');
+  }
+  const salida = [], errores = [];
+  const agregar = (fecha, todoElDia, inicio, fin, motivo) => {
+    if (!fechaValida(fecha)) { errores.push('Fecha inválida: ' + fecha); return; }
+    if (!todoElDia && (!inicio || !fin || minDe(inicio) >= minDe(fin))) { errores.push(`${fFecha(fecha)}: horario inválido`); return; }
+    const m = (motivo || motivoBase || (tipo === 'feriado' ? 'Feriado' : '')).slice(0, 120);
+    if (!m) { errores.push(`${fFecha(fecha)}: falta el motivo`); return; }
+    salida.push({fecha, tipo, todoElDia, inicio: todoElDia ? null : inicio, fin: todoElDia ? null : fin, motivo: m, laboratorios});
+  };
+  const texto = $('bqLista').value.trim();
+  if (texto) {
+    texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach(linea => {
+      const m = /^(?:(\d{1,2})\/(\d{1,2})\/(\d{4})|(\d{4})-(\d{2})-(\d{2}))\s*(?:(\d{1,2}:\d{2})\s*(?:-|a)\s*(\d{1,2}:\d{2}))?\s*(.*)$/i.exec(linea);
+      if (!m) { errores.push('No se entiende el renglón: ' + linea); return; }
+      const fecha = m[1] ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : `${m[4]}-${m[5]}-${m[6]}`;
+      const conHora = !!m[7];
+      agregar(fecha, !conHora, conHora ? leerHora(m[7]) : null, conHora ? leerHora(m[8]) : null, m[9].trim());
+    });
+  } else {
+    if (!$('bqFecha').value) throw new Error('Elegí una fecha.');
+    const todo = $('bqTodoDia').checked;
+    agregar($('bqFecha').value, todo, leerHora($('bqDesde').value), leerHora($('bqHasta').value), motivoBase);
+  }
+  if (errores.length) throw new Error(errores.join('\n'));
+  if (!salida.length) throw new Error('No hay fechas para guardar.');
+  if (salida.length > 150) throw new Error('Máximo 150 fechas por vez.');
+  return salida;
+}
+
+/* Reservas existentes que quedarían dentro del bloqueo (no se borran, solo se avisa) */
+async function reservasAfectadas(nuevos){
+  const out = [];
+  for (const fecha of [...new Set(nuevos.map(b => b.fecha))]) {
+    const snap = await db.collection('reservas').where('fecha', '==', fecha).get();
+    snap.forEach(d => {
+      const r = d.data();
+      const choca = nuevos.some(b => b.fecha === fecha && aplicaALab(b, r.laboratorio) &&
+        (b.todoElDia || (minDe(r.inicio) < minDe(b.fin) && minDe(r.fin) > minDe(b.inicio))));
+      if (choca) out.push(`${fFecha(fecha)} ${hhmm(r.inicio)}–${hhmm(r.fin)} ${r.laboratorio}: ${r.titulo}`);
+    });
+  }
+  return out;
+}
+
+$('bqGuardar').onclick = async () => {
+  const b = $('bqGuardar'); if (b.disabled) return;
+  const est = $('bqEstado'); est.style.color = '#153244';
+  try {
+    if (!soyAdmin) throw new Error('Solo los administradores pueden cargar bloqueos.');
+    let nuevos = armarBloqueos();
+    // Evitar duplicados exactos ya cargados
+    const repetidos = nuevos.filter(n => bloqueos.some(x => x.fecha === n.fecha && x.motivo === n.motivo && !!x.todoElDia === n.todoElDia));
+    nuevos = nuevos.filter(n => !repetidos.includes(n));
+    if (!nuevos.length) throw new Error('Todas esas fechas ya estaban cargadas.');
+    b.disabled = true; est.textContent = 'Revisando reservas existentes...';
+    const afectadas = await reservasAfectadas(nuevos);
+    if (afectadas.length && !confirm(`Ya hay ${afectadas.length} reserva(s) en esos días/horarios:\n\n${afectadas.slice(0, 15).join('\n')}${afectadas.length > 15 ? '\n…' : ''}\n\nEl bloqueo NO las borra (tendrás que moverlas o eliminarlas a mano).\n¿Guardar el bloqueo igual?`)) { est.textContent = ''; return; }
+    for (let i = 0; i < nuevos.length; i += 400) {
+      const batch = db.batch();
+      nuevos.slice(i, i + 400).forEach(n => batch.set(db.collection('bloqueos').doc(), {...n,
+        creadoPor: currentUser.uid, creadoPorEmail: currentUser.email || '',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()}));
+      await batch.commit();
+    }
+    $('bqLista').value = '';
+    est.textContent = `✓ Se guardaron ${nuevos.length} bloqueo(s).` + (repetidos.length ? ` (${repetidos.length} ya existían y se omitieron)` : '');
+  } catch(e) { console.error(e); est.style.color = '#b71c1c'; est.textContent = 'Error: ' + e.message; }
+  finally { b.disabled = false; }
+};
+
+/* Traer feriados nacionales desde un servicio público (se cargan en la lista para revisar antes de guardar) */
+$('bqImportar').onclick = async () => {
+  const est = $('bqEstado'), anio = parseInt($('bqAnio').value, 10);
+  if (!(anio >= 2024 && anio <= 2035)) { est.textContent = 'Indicá un año válido.'; return; }
+  est.style.color = '#153244'; est.textContent = 'Consultando feriados ' + anio + '...';
+  try {
+    const r = await fetch('https://api.argentinadatos.com/v1/feriados/' + anio);
+    if (!r.ok) throw new Error('respuesta ' + r.status);
+    const datos = await r.json();
+    if (!Array.isArray(datos)) throw new Error('formato inesperado');
+    const lineas = datos
+      .filter(f => f && fechaValida(f.fecha))
+      .filter(f => ![0, 6].includes(new Date(f.fecha + 'T12:00:00').getDay()))      // sábados y domingos ya están bloqueados
+      .filter(f => !bloqueos.some(b => b.fecha === f.fecha && b.todoElDia))
+      .map(f => `${fFecha(f.fecha)} ${String(f.nombre || 'Feriado').trim()}${f.tipo === 'puente' ? ' (día no laborable con fines turísticos)' : ''}`);
+    $('bqTipo').value = 'feriado'; $('bqTodosLabs').checked = true; $('bqLabs').style.display = 'none';
+    $('bqLista').value = lineas.join('\n');
+    est.textContent = lineas.length
+      ? `Se cargaron ${lineas.length} fechas en la lista. Revisalas (podés borrar o agregar renglones, por ej. días no laborables de la Ciudad) y tocá "Guardar bloqueo(s)".`
+      : 'No hay feriados nuevos de lunes a viernes para ese año.';
+  } catch(e) {
+    console.error(e);
+    est.style.color = '#b71c1c';
+    est.textContent = 'No se pudo consultar el listado automático (' + e.message + '). Pegá las fechas a mano en la lista, una por renglón.';
+  }
+};
+
+/* ---------- Escucha en tiempo real y rol ---------- */
+auth.onAuthStateChanged(async user => {
+  if (desuscribir) { desuscribir(); desuscribir = null; }
+  bloqueos = []; cargado = false; soyAdmin = false; btn.style.display = 'none'; modal.classList.remove('visible');
+  if (!user) return;
+  desuscribir = db.collection('bloqueos').onSnapshot(snap => {
+    bloqueos = snap.docs.map(d => ({id:d.id, ...d.data()})).filter(b => b.fecha);
+    cargado = true; refrescarVistas();
+  }, e => console.error('Bloqueos:', e));
+  try {
+    const doc = await db.collection('usuarios').doc(user.uid).get();
+    if (auth.currentUser?.uid !== user.uid) return;
+    soyAdmin = doc.exists && doc.data().rol === 'admin';
+    btn.style.display = soyAdmin ? '' : 'none';
+  } catch(e) { console.error(e); }
+});
+})();
+</script>
+<!-- ===================== FIN BLOQUEOS Y FERIADOS ===================== -->
 
 </body>
 </html>
